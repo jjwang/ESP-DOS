@@ -195,14 +195,19 @@ void app_main(void)
     /* 显示启动画面 + 倒计时 */
     show_splash();
 
-    int cx = TFT_WIDTH / 2, cy = TFT_HEIGHT - 40;
+    int iy = TFT_HEIGHT / 2 + 30;
+    char buf[64];
+
+    snprintf(buf, sizeof(buf), "编译: %s %s", __DATE__, __TIME__);
+    display_draw_text(16, iy, buf, 0xC618, COLOR_BLACK);
+
+    iy += 16;
     for (int i = 3; i > 0; i--) {
-        char num[4];
-        snprintf(num, sizeof(num), "%d", i);
-        display_draw_large_text(cx - 18, cy, num, 0xFFFF, COLOR_BLACK, 2);
+        snprintf(buf, sizeof(buf), "系统启动中，剩余 %d 秒...  ", i);
+        display_draw_text(16, iy, buf, 0xFFFF, COLOR_BLACK);
         display_flush_all();
         vTaskDelay(pdMS_TO_TICKS(1000));
-        display_fill_rect(cx - 18, cy, 48, 28, COLOR_BLACK);
+        display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);
     }
 
     /* 初始化WiFi (netif/event loop只需一次) */
