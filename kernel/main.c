@@ -192,9 +192,18 @@ void app_main(void)
     ESP_LOGI(TAG, "初始化终端...");
     term_init(&g_terminal);
 
-    /* 显示启动画面 */
+    /* 显示启动画面 + 倒计时 */
     show_splash();
-    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    int cx = TFT_WIDTH / 2, cy = TFT_HEIGHT - 40;
+    for (int i = 3; i > 0; i--) {
+        char num[4];
+        snprintf(num, sizeof(num), "%d", i);
+        display_draw_large_text(cx - 18, cy, num, 0xFFFF, COLOR_BLACK, 2);
+        display_flush_all();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        display_fill_rect(cx - 18, cy, 48, 28, COLOR_BLACK);
+    }
 
     /* 初始化WiFi (netif/event loop只需一次) */
     ESP_LOGI(TAG, "初始化WiFi...");
