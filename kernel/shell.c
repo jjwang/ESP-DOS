@@ -403,7 +403,7 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv)
             snprintf(line, sizeof(line), "已连接: %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
             term_puts(sh->term, line);
         } else {
-            term_puts(sh->term, "未连接。用法: wifi <ssid> <password>\n");
+            term_puts(sh->term, "未连接, 用法: wifi <ssid> <password>\n");
         }
         return;
     }
@@ -413,13 +413,6 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv)
     }
 
     term_puts(sh->term, "正在连接WiFi...\n");
-
-    esp_netif_init();
-    esp_event_loop_create_default();
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
 
     wifi_config_t wifi_config = {
         .sta = {

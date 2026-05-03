@@ -16,6 +16,8 @@
 #include "terminal.h"
 #include "vfs.h"
 #include "shell.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
 
 static const char *TAG = "MAIN";
 
@@ -193,6 +195,14 @@ void app_main(void)
     /* 显示启动画面 */
     show_splash();
     vTaskDelay(pdMS_TO_TICKS(3000));
+
+    /* 初始化WiFi (netif/event loop只需一次) */
+    ESP_LOGI(TAG, "初始化WiFi...");
+    esp_netif_init();
+    esp_event_loop_create_default();
+    esp_netif_create_default_wifi_sta();
+    wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
 
     /* 创建输入队列 */
     g_input_queue = xQueueCreate(UART_QUEUE_SIZE, sizeof(uint16_t));
