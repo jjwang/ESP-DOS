@@ -203,7 +203,7 @@ void app_main(void)
 
     iy += 16;
     for (int i = 3; i > 0; i--) {
-        snprintf(buf, sizeof(buf), "系统启动中，剩余 %d 秒...  ", i);
+        snprintf(buf, sizeof(buf), "系统启动中, 剩余 %d 秒...  ", i);
         display_draw_text(16, iy, buf, 0xFFFF, COLOR_BLACK);
         display_flush_all();
         vTaskDelay(pdMS_TO_TICKS(1000));
