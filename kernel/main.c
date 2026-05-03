@@ -198,10 +198,12 @@ void app_main(void)
     int iy = TFT_HEIGHT / 2 + 30;
     char buf[64];
 
+    display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);
     snprintf(buf, sizeof(buf), "编译: %s %s", __DATE__, __TIME__);
     display_draw_text(16, iy, buf, 0xC618, COLOR_BLACK);
 
     iy += 16;
+    display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);
     for (int i = 3; i > 0; i--) {
         snprintf(buf, sizeof(buf), "系统启动中, 剩余 %d 秒...  ", i);
         display_draw_text(16, iy, buf, 0xFFFF, COLOR_BLACK);
