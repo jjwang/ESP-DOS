@@ -124,23 +124,25 @@ int elf_load(const char *path, elf_load_result_t *out)
     /* 写回DCache, 确保数据到达PSRAM */
     cache_hal_writeback_addr((uint32_t)base, ROUND_UP(total_size, CACHE_LINE));
 
-    /* 将PSRAM物理页映射到ICache */
+    /* 将PSRAM物理页映射到ICache (覆盖整个ELF) */
     void *exec_addr = base;
     esp_paddr_t phys_addr;
     mmu_target_t mmu_target;
     if (esp_mmu_vaddr_to_paddr(base, &phys_addr, &mmu_target) == ESP_OK) {
         uint32_t page_size = 0x10000;
+        uint32_t offset_in_page = (uint32_t)base & (page_size - 1);
         esp_paddr_t page_start = phys_addr & ~(page_size - 1);
+        size_t map_size = ROUND_UP(offset_in_page + total_size, page_size);
         void *mapped = NULL;
-        esp_err_t ret = esp_mmu_map(page_start, page_size,
+        esp_err_t ret = esp_mmu_map(page_start, map_size,
                                     MMU_TARGET_PSRAM0,
                                     MMU_MEM_CAP_EXEC | MMU_MEM_CAP_READ,
                                     0, &mapped);
         if (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE) {
-            exec_addr = (uint8_t *)mapped + ((uint32_t)base & (page_size - 1));
-            /* 使ICache对exec区失效, 强制从PSRAM重新读取 */
+            exec_addr = (uint8_t *)mapped + offset_in_page;
             cache_hal_invalidate_addr((uint32_t)exec_addr, ROUND_UP(total_size, CACHE_LINE));
-            ESP_LOGI(TAG, "映射到ICache: data=%p exec=%p", base, exec_addr);
+            ESP_LOGI(TAG, "映射到ICache: data=%p exec=%p size=%dK", base, exec_addr,
+                     (int)(map_size / 1024));
         } else {
             ESP_LOGW(TAG, "MMU映射失败 (%d), 回退", ret);
         }

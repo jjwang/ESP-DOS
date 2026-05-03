@@ -1,6 +1,6 @@
 MEMORY
 {
-  ram : org = 0x3F000000, len = 0x40000
+  ram : org = 0x3F000000, len = 0x200000
 }
 
 SECTIONS
