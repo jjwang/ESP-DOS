@@ -1,0 +1,16 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "display_st7789.c"
+        "terminal.c"
+        "vfs.c"
+        "shell.c"
+        "elf_loader.c"
+        "process.c"
+    INCLUDE_DIRS
+        "."
+        "../include"
+    REQUIRES
+        driver
+        spiffs
+)

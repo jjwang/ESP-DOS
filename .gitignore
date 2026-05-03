@@ -1,0 +1,31 @@
+# Build
+.pio/
+sdkconfig.esp32-s3-dev
+sdkconfig
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Build artifacts
+data/bin/
+
+# Agent working files
+AGENTS.md
+
+# Serial dumps
+*.bin
+
+# SPIFFS image
+spiffs.bin
