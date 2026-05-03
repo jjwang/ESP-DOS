@@ -9,6 +9,11 @@
 #include "esp_chip_info.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+#include "lwip/err.h"
+#include "lwip/netdb.h"
 #include "shell.h"
 #include "display_st7789.h"
 #include "process.h"
@@ -38,6 +43,8 @@ static void cmd_mv(shell_t *sh, int argc, char **argv);
 static void cmd_cp(shell_t *sh, int argc, char **argv);
 static void cmd_exec(shell_t *sh, int argc, char **argv);
 static void cmd_kill(shell_t *sh, int argc, char **argv);
+static void cmd_wifi(shell_t *sh, int argc, char **argv);
+static void cmd_sysinfo(shell_t *sh, int argc, char **argv);
 
 static const cmd_entry_t cmd_table[] = {
     {"help",   "显示帮助信息",        "help [命令]", cmd_help},
@@ -56,6 +63,8 @@ static const cmd_entry_t cmd_table[] = {
     {"mv",     "移动/重命名文件",     "mv <源> <目标>", cmd_mv},
     {"cp",     "复制文件",           "cp <源> <目标>", cmd_cp},
     {"kill",   "终止进程",           "kill <PID>", cmd_kill},
+    {"wifi",   "连接WiFi网络",        "wifi <ssid> <password>", cmd_wifi},
+    {"sysinfo","显示系统资源",        "sysinfo", cmd_sysinfo},
     {NULL, NULL, NULL, NULL}
 };
 
@@ -381,6 +390,92 @@ static void cmd_cp(shell_t *sh, int argc, char **argv)
     vfs_close(src);
     vfs_close(dst);
     term_puts(sh->term, "复制完成\n");
+}
+
+/* ---- WiFi命令 ---- */
+static void cmd_wifi(shell_t *sh, int argc, char **argv)
+{
+    if (argc < 2) {
+        /* 显示当前状态 */
+        wifi_ap_record_t ap;
+        if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+            char line[128];
+            snprintf(line, sizeof(line), "已连接: %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
+            term_puts(sh->term, line);
+        } else {
+            term_puts(sh->term, "未连接。用法: wifi <ssid> <password>\n");
+        }
+        return;
+    }
+    if (argc < 3) {
+        term_puts(sh->term, "用法: wifi <ssid> <password>\n");
+        return;
+    }
+
+    term_puts(sh->term, "正在连接WiFi...\n");
+
+    esp_netif_init();
+    esp_event_loop_create_default();
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&cfg);
+
+    wifi_config_t wifi_config = {
+        .sta = {
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+        },
+    };
+    strncpy((char *)wifi_config.sta.ssid, argv[1], sizeof(wifi_config.sta.ssid) - 1);
+    strncpy((char *)wifi_config.sta.password, argv[2], sizeof(wifi_config.sta.password) - 1);
+
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    esp_wifi_start();
+
+    /* 等待连接 (最多10秒) */
+    for (int i = 0; i < 50; i++) {
+        wifi_ap_record_t ap;
+        if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "已连接: %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
+            term_puts(sh->term, buf);
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    term_puts(sh->term, "连接超时\n");
+}
+
+/* ---- 系统资源命令 ---- */
+static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    char line[128];
+
+    /* 内存信息 */
+    size_t total_int = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
+    size_t free_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+    term_puts(sh->term, "----- 内存资源 -----\n");
+    snprintf(line, sizeof(line), "内部RAM: %dK / %dK\n", (int)((total_int - free_int) / 1024), (int)(total_int / 1024));
+    term_puts(sh->term, line);
+    if (total_psram > 0) {
+        snprintf(line, sizeof(line), "PSRAM:   %dK / %dK\n", (int)((total_psram - free_psram) / 1024), (int)(total_psram / 1024));
+        term_puts(sh->term, line);
+    }
+
+    /* 文件系统 */
+    uint32_t fs_total = 0, fs_used = 0;
+    vfs_info(&fs_total, &fs_used);
+    uint32_t fs_free = fs_total - fs_used;
+    int pct = fs_total > 0 ? (int)(fs_used * 100 / fs_total) : 0;
+
+    term_puts(sh->term, "----- 存储资源 -----\n");
+    snprintf(line, sizeof(line), "SPIFFS:  %dK / %dK (%d%%)\n", (int)(fs_free / 1024), (int)(fs_total / 1024), pct);
+    term_puts(sh->term, line);
 }
 
 /* ---- 命令解析与执行 ---- */
