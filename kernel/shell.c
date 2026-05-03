@@ -11,6 +11,7 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_flash.h"
 #include "nvs_flash.h"
 #include "lwip/err.h"
 #include "lwip/netdb.h"
@@ -413,6 +414,7 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv)
     }
 
     term_puts(sh->term, "正在连接WiFi...\n");
+    term_render(sh->term);
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -425,19 +427,23 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv)
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
     esp_wifi_start();
+    esp_wifi_connect();
 
-    /* 等待连接 (最多10秒) */
+    /* 连接期间降低WiFi日志级别, 避免刷屏 */
+    esp_log_level_set("wifi", ESP_LOG_ERROR);
     for (int i = 0; i < 50; i++) {
         wifi_ap_record_t ap;
         if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
             char buf[64];
             snprintf(buf, sizeof(buf), "已连接: %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
             term_puts(sh->term, buf);
+            term_render(sh->term);
             return;
         }
         vTaskDelay(pdMS_TO_TICKS(200));
     }
     term_puts(sh->term, "连接超时\n");
+    term_render(sh->term);
 }
 
 /* ---- 系统资源命令 ---- */
@@ -446,19 +452,28 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     (void)argc; (void)argv;
     char line[128];
 
-    /* 内存信息 */
+    /* CPU */
+    esp_chip_info_t chip;
+    esp_chip_info(&chip);
+    uint32_t flash_sz = 0;
+    esp_flash_get_size(NULL, &flash_sz);
+
+    term_puts(sh->term, "-- CPU --\n");
+    snprintf(line, sizeof(line), "ESP32-S3 rev%d  240MHz  %d核\n", chip.revision, chip.cores);
+    term_puts(sh->term, line);
+
     size_t total_int = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
     size_t free_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
-    term_puts(sh->term, "----- 内存资源 -----\n");
-    snprintf(line, sizeof(line), "内部RAM: %dK / %dK\n", (int)((total_int - free_int) / 1024), (int)(total_int / 1024));
+    term_puts(sh->term, "-- 内存 (片上512KB) --\n");
+    snprintf(line, sizeof(line), "堆: %dK/%dK (%d%%空闲)\n",
+             (int)(free_int / 1024), (int)(total_int / 1024),
+             (int)(free_int * 100 / total_int));
     term_puts(sh->term, line);
-    if (total_psram > 0) {
-        snprintf(line, sizeof(line), "PSRAM:   %dK / %dK\n", (int)((total_psram - free_psram) / 1024), (int)(total_psram / 1024));
-        term_puts(sh->term, line);
-    }
+    snprintf(line, sizeof(line), "缓存+代码: %dK\n", (int)((512 - (int)total_int) / 1024));
+    term_puts(sh->term, line);
 
     /* 文件系统 */
     uint32_t fs_total = 0, fs_used = 0;
@@ -466,8 +481,14 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     uint32_t fs_free = fs_total - fs_used;
     int pct = fs_total > 0 ? (int)(fs_used * 100 / fs_total) : 0;
 
-    term_puts(sh->term, "----- 存储资源 -----\n");
-    snprintf(line, sizeof(line), "SPIFFS:  %dK / %dK (%d%%)\n", (int)(fs_free / 1024), (int)(fs_total / 1024), pct);
+    term_puts(sh->term, "-- 存储 --\n");
+    snprintf(line, sizeof(line), "Flash: %dMB   SPIFFS: %dKB\n",
+             (int)(flash_sz / 1024 / 1024), (int)(fs_total / 1024));
+    term_puts(sh->term, line);
+    snprintf(line, sizeof(line), "PSRAM: %dMB\n", (int)(total_psram / 1024 / 1024));
+    term_puts(sh->term, line);
+    snprintf(line, sizeof(line), "SPIFFS空闲: %dK/%dK (%d%%)\n",
+             (int)(fs_free / 1024), (int)(fs_total / 1024), pct);
     term_puts(sh->term, line);
 }
 
@@ -629,7 +650,9 @@ void shell_init(shell_t *sh, terminal_t *term)
 void shell_process_char(shell_t *sh, uint16_t ch)
 {
     if (ch == '\r' || ch == '\n') {
-        /* 执行命令 */
+        /* 跳过 CR/LF 双发导致的二次执行 (空行不产生新提示符) */
+        if (sh->input_len == 0) return;
+
         sh->input_buf[sh->input_len] = '\0';
 
         /* 转为UTF-8字符串 */
