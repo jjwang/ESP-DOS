@@ -1,4 +1,4 @@
-#include "../include/command_sdk.h"
+#include "../include/app_sdk.h"
 
 void _start(int argc, char **argv, syscall_t *sys)
 {

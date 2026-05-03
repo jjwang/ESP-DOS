@@ -26,7 +26,7 @@ typedef struct {
 /* 进程入口类型 (传给ELF的main) */
 typedef void (*proc_entry_t)(void *arg);
 
-/* 系统调用表 (兼容 command_sdk.h) */
+/* 系统调用表 (兼容 app_sdk.h) */
 typedef struct syscall_table_s {
     void (*print)(const char *s);
     void (*println)(const char *s);

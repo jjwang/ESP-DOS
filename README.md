@@ -97,7 +97,7 @@ opencrab/
 │   └── df.c                 # df 命令
 ├── include/                 # 头文件
 │   ├── config.h             # 引脚/系统配置
-│   ├── command_sdk.h        # ELF 应用 SDK（系统调用表定义）
+│   ├── app_sdk.h        # ELF 应用 SDK（系统调用表定义）
 │   ├── display_st7789.h
 │   ├── terminal.h
 │   ├── vfs.h
@@ -132,14 +132,14 @@ python tools/build_all.py
 ```
 
 输出：
-- `data/bin/<cmd>` — ELF 二进制文件
-- `include/fonts/elf_<cmd>.h` — 嵌入固件的 C 头文件
+- `data/bin/<app>` — ELF 二进制文件
+- `include/fonts/elf_<app>.h` — 嵌入固件的 C 头文件
 
 ### 添加新应用
 
 1. 在 `apps/` 下创建 C 源文件，引用 SDK：
 ```c
-#include "../include/command_sdk.h"
+#include "../include/app_sdk.h"
 
 void _start(int argc, char **argv, syscall_t *sys)
 {

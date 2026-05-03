@@ -78,7 +78,7 @@ xtensa-esp32s3-elf-strip --strip-all data/bin/<应用名>
 1. **创建源文件** `apps/<应用名>.c`：
 
 ```c
-#include "../include/command_sdk.h"
+#include "../include/app_sdk.h"
 
 void _start(int argc, char **argv, syscall_t *sys)
 {
@@ -126,7 +126,7 @@ python -m platformio run
 
 ## 应用 SDK 参考
 
-ELF 应用通过 `syscall_t` 结构体与内核交互。结构体定义在 `include/command_sdk.h`。
+ELF 应用通过 `syscall_t` 结构体与内核交互。结构体定义在 `include/app_sdk.h`。
 
 ### 输出函数
 
@@ -264,7 +264,7 @@ CONFIG_SPIRAM_RODATA=y
 ## 示例：free 应用
 
 ```c
-#include "../include/command_sdk.h"
+#include "../include/app_sdk.h"
 
 void _start(int argc, char **argv, syscall_t *sys)
 {
@@ -285,7 +285,7 @@ void _start(int argc, char **argv, syscall_t *sys)
 ## 示例：带参数的应用
 
 ```c
-#include "../include/command_sdk.h"
+#include "../include/app_sdk.h"
 
 void _start(int argc, char **argv, syscall_t *sys)
 {
