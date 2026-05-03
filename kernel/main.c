@@ -209,7 +209,8 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(1000));
         display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);
     }
-    display_fill_rect(0, iy - 16, TFT_WIDTH, 20, COLOR_BLACK);
+    display_fill(COLOR_BLACK);
+    display_flush_all();
 
     /* 初始化WiFi (netif/event loop只需一次) */
     ESP_LOGI(TAG, "初始化WiFi...");
