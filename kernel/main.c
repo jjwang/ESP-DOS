@@ -18,6 +18,7 @@
 #include "shell.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "tca8418.h"
 
 static const char *TAG = "MAIN";
 
@@ -40,6 +41,24 @@ static void uart_init(void)
     uart_set_pin(UART_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_NUM_0, 256, 0, 0, NULL, 0);
+}
+
+/* TCA8418 键盘输入任务 */
+static void kbd_task(void *arg)
+{
+    (void)arg;
+    if (tca8418_init() != 0) {
+        ESP_LOGW(TAG, "键盘初始化失败, 禁用");
+        vTaskDelete(NULL);
+        return;
+    }
+    while (1) {
+        uint16_t ch;
+        int ret = tca8418_read_key(&ch);
+        if (ret > 0 && g_input_queue)
+            xQueueSend(g_input_queue, &ch, 0);
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
 }
 
 /* 串口输入任务 */
@@ -229,9 +248,12 @@ void app_main(void)
         return;
     }
 
-    /* 创建输入任务 (在APP_CPU上运行) */
+    /* 创建串口输入任务 (在APP_CPU上运行) */
     TaskHandle_t input_handle;
     xTaskCreatePinnedToCore(input_task, "uart_input", 4096, NULL, 10, &input_handle, 1);
+
+    /* 创建键盘输入任务 */
+    xTaskCreatePinnedToCore(kbd_task, "kbd", 4096, NULL, 9, NULL, 1);
 
     /* 创建Shell任务 (在PRO_CPU上运行) */
     TaskHandle_t shell_handle;

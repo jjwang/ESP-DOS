@@ -7,6 +7,7 @@ idf_component_register(
         "shell.c"
         "elf_loader.c"
         "process.c"
+        "tca8418.c"
     INCLUDE_DIRS
         "."
         "../include"
