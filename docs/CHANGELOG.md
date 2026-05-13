@@ -16,9 +16,9 @@
 **问题**：双核同时调用 `ets_printf` / `uart_write_bytes` 写 UART 导致日志行交织。
 
 **修复**：`kernel/main.c`
-- 添加 `log_vprintf` 回调，使用 `vsnprintf` + `uart_write_bytes` + 原子锁 (`__sync_lock_test_and_set`)
-- `uart_init()` 后设置 `esp_log_set_vprintf(log_vprintf)`
-- `esp_log_set_vprintf` 后添加 `vTaskDelay(250)` 等待前一行输出完成
+- 添加 `log_vprintf` 回调，使用 `esp_rom_vprintf`（与 ROM 启动路径一致）
+- `esp_log_set_vprintf` 移至 `app_main` 第一行，尽早接管所有日志输出
+- 回调后添加 `vTaskDelay(20ms)`，等待另一核的启动日志传输完毕
 
 ### 其他变更
 
