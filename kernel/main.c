@@ -28,9 +28,14 @@ static QueueHandle_t g_input_queue = NULL;
 
 #define UART_QUEUE_SIZE 64
 
+static volatile int s_print_lock = 0;
+
 static int log_vprintf(const char *fmt, va_list args)
 {
-    return esp_rom_vprintf(fmt, args);
+    while (__sync_lock_test_and_set(&s_print_lock, 1)) {}
+    int n = esp_rom_vprintf(fmt, args);
+    __sync_lock_release(&s_print_lock);
+    return n;
 }
 
 static void uart_init(void)
