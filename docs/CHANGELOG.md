@@ -2,6 +2,17 @@
 
 ## 2026-05-13
 
+### 新增：TCA8418 键盘驱动 (TI TCA8418)
+
+- `kernel/tca8418.c` `include/tca8418.h`：基于 Linux 内核驱动重写，修正为 TI TCA8418 寄存器映射
+- 修正了寄存器地址（原为 NXP TCA8418E 映射，实际芯片为 TI TCA8418）
+- 添加 `REG_KP_GPIO`、`REG_GPIO_DIR`、`REG_GPI_EM` 等关键寄存器配置
+- `CFG.KE_IEN` 为 BIT(0)（非 BIT(6)），`INT_STAT.K_INT` 为 BIT(0)
+- 键事件寄存器在 `REG_KEY_EVENT_A`(0x04)，键码 = row × 10 + col + 1
+- 行上拉通过 `REG_GPIO_PULL1`(0x2C) 2-bit 编码控制
+- `include/config.h`：I2C 引脚改为 GPIO 4(SDA)/5(SCL)，移除 INT 引脚
+- 4×4 数字键盘映射（物理接线 R0↔TCA R3, R1↔TCA R2, R2↔TCA R1, R3↔TCA R0）
+
 ### 修复：ESP_LOGI 日志串口输出
 
 **问题**：`CONFIG_ESP_CONSOLE_UART_NONE=y` 导致控制台禁用，`ESP_LOGI` 输出被丢弃，

@@ -3,61 +3,83 @@
 
 #include <stdint.h>
 
-/* I2C 地址 (7位) */
 #define TCA8418_I2C_ADDR    0x34
 
-/* 寄存器 */
-#define TCA8418_REG_CFG         0x01
-#define TCA8418_REG_INT_STAT    0x02
-#define TCA8418_REG_KEY_LC      0x03
-#define TCA8418_REG_GPIO_INT_LVL1 0x0C
-#define TCA8418_REG_GPIO_INT_LVL2 0x0D
-#define TCA8418_REG_DEBOUNCE_DIS1 0x0E
-#define TCA8418_REG_GPIO_PULL1   0x0F
-#define TCA8418_REG_GPIO_PULL2   0x10
-#define TCA8418_REG_GPIO_PULL3   0x11
-#define TCA8418_REG_KEY_EVENT_A 0x15
-#define TCA8418_REG_KEY_EVENT_B 0x16
-#define TCA8418_REG_KEY_LC_0    0x1D
-#define TCA8418_REG_KEY_LC_1    0x1E
-#define TCA8418_REG_KEY_LC_2    0x1F
-#define TCA8418_REG_KEY_LC_3    0x20
-#define TCA8418_REG_KEY_LC_4    0x21
-#define TCA8418_REG_KEY_LC_5    0x22
-#define TCA8418_REG_KEY_LC_6    0x23
-#define TCA8418_REG_KEY_LC_7    0x24
-#define TCA8418_REG_KEY_LC_8    0x25
-#define TCA8418_REG_KEY_LC_9    0x26
+/* 寄存器地址 (Linux 内核驱动定义) */
+#define REG_CFG              0x01
+#define REG_INT_STAT         0x02
+#define REG_KEY_LCK_EC       0x03
+#define REG_KEY_EVENT_A      0x04
+#define REG_KEY_EVENT_B      0x05
+#define REG_KEY_EVENT_C      0x06
+#define REG_KEY_EVENT_D      0x07
+#define REG_KEY_EVENT_E      0x08
+#define REG_KEY_EVENT_F      0x09
+#define REG_KEY_EVENT_G      0x0A
+#define REG_KEY_EVENT_H      0x0B
+#define REG_KEY_EVENT_I      0x0C
+#define REG_KEY_EVENT_J      0x0D
+#define REG_KP_LCK_TIMER     0x0E
+#define REG_UNLOCK1          0x0F
+#define REG_UNLOCK2          0x10
+#define REG_GPIO_INT_STAT1   0x11
+#define REG_GPIO_INT_STAT2   0x12
+#define REG_GPIO_INT_STAT3   0x13
+#define REG_GPIO_DAT_STAT1   0x14
+#define REG_GPIO_DAT_STAT2   0x15
+#define REG_GPIO_DAT_STAT3   0x16
+#define REG_GPIO_DAT_OUT1    0x17
+#define REG_GPIO_DAT_OUT2    0x18
+#define REG_GPIO_DAT_OUT3    0x19
+#define REG_GPIO_INT_EN1     0x1A
+#define REG_GPIO_INT_EN2     0x1B
+#define REG_GPIO_INT_EN3     0x1C
+#define REG_KP_GPIO1         0x1D
+#define REG_KP_GPIO2         0x1E
+#define REG_KP_GPIO3         0x1F
+#define REG_GPI_EM1          0x20
+#define REG_GPI_EM2          0x21
+#define REG_GPI_EM3          0x22
+#define REG_GPIO_DIR1        0x23
+#define REG_GPIO_DIR2        0x24
+#define REG_GPIO_DIR3        0x25
+#define REG_GPIO_INT_LVL1    0x26
+#define REG_GPIO_INT_LVL2    0x27
+#define REG_GPIO_INT_LVL3    0x28
+#define REG_DEBOUNCE_DIS1    0x29
+#define REG_DEBOUNCE_DIS2    0x2A
+#define REG_DEBOUNCE_DIS3    0x2B
+#define REG_GPIO_PULL1       0x2C
+#define REG_GPIO_PULL2       0x2D
+#define REG_GPIO_PULL3       0x2E
 
-/* CFG 寄存器位 */
-#define TCA8418_CFG_KE_IEN      (1 << 6)  /* 键盘中断使能 */
-#define TCA8418_CFG_GPI_IEN     (1 << 5)  /* GPIO 中断使能 */
-#define TCA8418_CFG_INT_CFG     (1 << 1)  /* 中断配置: 1=开漏低电平, 0=推挽 */
-#define TCA8418_CFG_OVR_FLOW_M  (1 << 0)  /* FIFO 溢出时覆盖旧事件 */
+/* CFG 位 */
+#define CFG_AI              BIT(7)  /* 地址自增 */
+#define CFG_GPI_E_CFG       BIT(6)  /* GPI 边沿配置 */
+#define CFG_OVR_FLOW_M      BIT(5)  /* FIFO 溢出模式 */
+#define CFG_INT_CFG         BIT(4)  /* 中断输出配置 (1=开漏) */
+#define CFG_OVR_FLOW_IEN    BIT(3)  /* 溢出中断使能 */
+#define CFG_K_LCK_IEN       BIT(2)  /* 键锁中断使能 */
+#define CFG_GPI_IEN         BIT(1)  /* GPI 中断使能 */
+#define CFG_KE_IEN          BIT(0)  /* 键事件中断使能(最低位!)  */
 
 /* INT_STAT 位 */
-#define TCA8418_INT_KE          (1 << 6)  /* 键盘事件 */
-#define TCA8418_INT_GP          (1 << 5)  /* GPIO 事件 */
+#define INT_STAT_CAD_INT    BIT(4)
+#define INT_STAT_OVR_FLOW_INT BIT(3)
+#define INT_STAT_K_LCK_INT  BIT(2)
+#define INT_STAT_GPI_INT    BIT(1)
+#define INT_STAT_K_INT      BIT(0)  /* 键事件中断(最低位!) */
 
-/* 键盘行列数 */
-#define TCA8418_ROWS 8
-#define TCA8418_COLS 10
-#define TCA8418_KEYS (TCA8418_ROWS * TCA8418_COLS)
+/* 键事件格式 */
+#define KEY_EVENT_CODE      0x7F
+#define KEY_EVENT_VALUE     0x80    /* 1=按下, 0=释放 */
 
-/* 事件格式 */
-#define TCA8418_EVENT_MASK      0x7F
-#define TCA8418_EVENT_RELEASE   0x80
+/* 行列配置 */
+#define TCA8418_MAX_ROWS    8
+#define TCA8418_MAX_COLS    10
+#define TCA8418_KEYS        (TCA8418_MAX_ROWS * TCA8418_MAX_COLS)
 
-/* ---- API ---- */
-
-/* 初始化 I2C 和 TCA8418 */
 int tca8418_init(void);
-
-/* 读取一个按键事件, 返回 unicode 字符.
- *   返回 >0  = 按下的字符
- *   返回 0   = 无按键
- *   返回 -1  = 键释放 (可忽略)
- */
 int tca8418_read_key(uint16_t *ch);
 
 #endif

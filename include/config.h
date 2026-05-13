@@ -82,9 +82,8 @@
 #define COLOR_AMBER     0xFB60  /* 琥珀色 - 经典终端颜色 */
 
 /* ---- TCA8418 键盘 I2C 引脚 ---- */
-#define CONFIG_I2C_SDA_PIN  GPIO_NUM_8
-#define CONFIG_I2C_SCL_PIN  GPIO_NUM_9
-#define CONFIG_KBD_INT_PIN  GPIO_NUM_2
+#define CONFIG_I2C_SDA_PIN  4
+#define CONFIG_I2C_SCL_PIN  5
 
 /* ---- 系统配置 ---- */
 #define SHELL_PROMPT    "$ "
