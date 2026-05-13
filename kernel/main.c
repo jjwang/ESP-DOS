@@ -27,6 +27,20 @@ static QueueHandle_t g_input_queue = NULL;
 
 #define UART_QUEUE_SIZE 64
 
+static volatile int s_print_lock = 0;
+
+static int log_vprintf(const char *fmt, va_list args)
+{
+    char buf[256];
+    int n = vsnprintf(buf, sizeof(buf), fmt, args);
+    if (n > 0) {
+        while (__sync_lock_test_and_set(&s_print_lock, 1)) {}
+        uart_write_bytes(UART_NUM_0, buf, n < (int)sizeof(buf) ? n : sizeof(buf) - 1);
+        __sync_lock_release(&s_print_lock);
+    }
+    return n;
+}
+
 static void uart_init(void)
 {
     uart_config_t cfg = {
@@ -202,6 +216,8 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     uart_init();
+    esp_log_set_vprintf(log_vprintf);
+    vTaskDelay(pdMS_TO_TICKS(250));
 
     /* 初始化显示 */
     ESP_LOGI(TAG, "初始化显示...");
