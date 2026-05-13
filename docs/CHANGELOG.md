@@ -13,6 +13,15 @@
 - `include/config.h`：I2C 引脚改为 GPIO 4(SDA)/5(SCL)，移除 INT 引脚
 - 4×4 数字键盘映射（物理接线 R0↔TCA R3, R1↔TCA R2, R2↔TCA R1, R3↔TCA R0）
 
+### 新增：DS3231 RTC 驱动
+
+- `kernel/ds3231.c` `include/ds3231.h`：DS3231 实时时钟驱动
+- 独立 I2C 总线（I2C_NUM_0, SDA=GPIO15, SCL=GPIO16）
+- 系统启动时自动读取 RTC 时间同步到 ESP32 系统时钟
+- `kernel/i2c_bus.c` `include/i2c_bus.h`：抽出共享 I2C 总线初始化
+- 更新 `kernel/CMakeLists.txt` 添加新源文件
+- `docs/keyboard.md`：更新 TCA8418 + DS3231 完整接线文档
+
 ### 修复：ESP_LOGI 日志串口输出
 
 **问题**：`CONFIG_ESP_CONSOLE_UART_NONE=y` 导致控制台禁用，`ESP_LOGI` 输出被丢弃，

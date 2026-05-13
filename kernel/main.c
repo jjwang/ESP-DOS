@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -20,6 +22,8 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "tca8418.h"
+#include "ds3231.h"
+#include "i2c_bus.h"
 
 static const char *TAG = "MAIN";
 
@@ -246,6 +250,28 @@ void app_main(void)
     }
     display_fill(COLOR_BLACK);
     display_flush_all();
+
+    /* 初始化 I2C 总线 (共享于 TCA8418 + DS3231) */
+    ESP_LOGI(TAG, "初始化 I2C 总线...");
+    i2c_bus_init();
+
+    /* 初始化 DS3231 RTC */
+    ESP_LOGI(TAG, "初始化 DS3231 RTC...");
+    if (ds3231_init() == 0) {
+        struct tm tm;
+        if (ds3231_get_time(&tm) == 0) {
+            struct timeval tv = {
+                .tv_sec = mktime(&tm),
+                .tv_usec = 0
+            };
+            settimeofday(&tv, NULL);
+            ESP_LOGI(TAG, "系统时间已同步: %04d-%02d-%02d %02d:%02d:%02d",
+                     tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                     tm.tm_hour, tm.tm_min, tm.tm_sec);
+        }
+    } else {
+        ESP_LOGW(TAG, "DS3231 未检测到, 跳过 RTC");
+    }
 
     /* 初始化WiFi (netif/event loop只需一次) */
     ESP_LOGI(TAG, "初始化WiFi...");

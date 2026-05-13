@@ -44,17 +44,6 @@ static esp_err_t reg_read(uint8_t reg, uint8_t *val)
 
 int tca8418_init(void)
 {
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = (gpio_num_t)CONFIG_I2C_SDA_PIN,
-        .scl_io_num = (gpio_num_t)CONFIG_I2C_SCL_PIN,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ,
-    };
-    ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_1, &conf));
-    ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_1, I2C_MODE_MASTER, 0, 0, 0));
-
     uint8_t who;
     if (reg_read(REG_CFG, &who) != ESP_OK) {
         ESP_LOGE(TAG, "TCA8418 未响应");

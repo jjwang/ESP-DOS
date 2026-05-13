@@ -81,9 +81,13 @@
 #define COLOR_LIGHT_GRAY 0xC618  /* RGB565 浅灰 */
 #define COLOR_AMBER     0xFB60  /* 琥珀色 - 经典终端颜色 */
 
-/* ---- TCA8418 键盘 I2C 引脚 ---- */
+/* ---- TCA8418 键盘 I2C 引脚 (I2C_NUM_1) ---- */
 #define CONFIG_I2C_SDA_PIN  4
 #define CONFIG_I2C_SCL_PIN  5
+
+/* ---- DS3231 RTC I2C 引脚 (I2C_NUM_0) ---- */
+#define DS3231_I2C_SDA_PIN  15
+#define DS3231_I2C_SCL_PIN  16
 
 /* ---- 系统配置 ---- */
 #define SHELL_PROMPT    "$ "

@@ -8,6 +8,8 @@ idf_component_register(
         "elf_loader.c"
         "process.c"
         "tca8418.c"
+        "ds3231.c"
+        "i2c_bus.c"
     INCLUDE_DIRS
         "."
         "../include"
