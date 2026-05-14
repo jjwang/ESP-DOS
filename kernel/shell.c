@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
 #include "esp_heap_caps.h"
@@ -15,12 +16,42 @@
 #include "nvs_flash.h"
 #include "lwip/err.h"
 #include "lwip/netdb.h"
+#include <ctype.h>
 #include "shell.h"
 #include "display_st7789.h"
 #include "process.h"
 #include "vfs.h"
 
-/* ---- 命令表 ---- */
+/* 分页输出 */
+extern QueueHandle_t g_input_queue;
+static int s_page_lines = 0;
+
+void shell_puts(shell_t *sh, const char *s)
+{
+    term_puts(sh->term, s);
+    for (const char *p = s; *p; p++) {
+        if (*p == '\n') {
+            s_page_lines++;
+            if (s_page_lines >= TERM_ROWS - 2) {
+                term_puts(sh->term, "-- 按任意键继续 --");
+                uint16_t ch;
+                xQueueReceive(g_input_queue, &ch, portMAX_DELAY);
+                (void)ch;
+                s_page_lines = 0;
+                char clr[32];
+                int len = strlen("-- 按任意键继续 --");
+                memset(clr, '\b', len); clr[len] = '\0';
+                term_puts(sh->term, clr);
+                memset(clr, ' ', len); clr[len] = '\0';
+                term_puts(sh->term, clr);
+                memset(clr, '\b', len); clr[len] = '\0';
+                term_puts(sh->term, clr);
+            }
+        }
+    }
+}
+
+/* ---- 命令�?---- */
 typedef struct {
     const char *name;
     const char *desc;
@@ -32,7 +63,6 @@ static void cmd_help(shell_t *sh, int argc, char **argv);
 static void cmd_ls(shell_t *sh, int argc, char **argv);
 static void cmd_cat(shell_t *sh, int argc, char **argv);
 static void cmd_cd(shell_t *sh, int argc, char **argv);
-static void cmd_pwd(shell_t *sh, int argc, char **argv);
 static void cmd_mkdir(shell_t *sh, int argc, char **argv);
 static void cmd_rm(shell_t *sh, int argc, char **argv);
 static void cmd_clear(shell_t *sh, int argc, char **argv);
@@ -48,94 +78,103 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv);
 static void cmd_sysinfo(shell_t *sh, int argc, char **argv);
 
 static const cmd_entry_t cmd_table[] = {
-    {"help",   "显示帮助信息",        "help [命令]", cmd_help},
-    {"ls",     "列出目录内容",        "ls [-l] [路径]", cmd_ls},
-    {"cat",    "显示文件内容",        "cat <文件>", cmd_cat},
-    {"cd",     "切换当前目录",        "cd <路径>", cmd_cd},
-    {"pwd",    "显示当前目录",        "pwd", cmd_pwd},
-    {"mkdir",  "创建目录",           "mkdir <目录名>", cmd_mkdir},
-    {"rm",     "删除文件或目录",      "rm [-r] <路径>", cmd_rm},
-    {"clear",  "清屏",              "clear", cmd_clear},
-    {"ps",     "显示进程信息",        "ps", cmd_ps},
-    {"reboot", "重启系统",           "reboot", cmd_reboot},
-    {"touch",  "创建空文件",         "touch <文件>", cmd_touch},
-    {"write",  "写入文件",           "write <文件> <内容>", cmd_write},
-    {"exec",   "运行ELF程序",        "exec <ELF文件>", cmd_exec},
-    {"mv",     "移动/重命名文件",     "mv <源> <目标>", cmd_mv},
-    {"cp",     "复制文件",           "cp <源> <目标>", cmd_cp},
-    {"kill",   "终止进程",           "kill <PID>", cmd_kill},
-    {"wifi",   "连接WiFi网络",        "wifi <ssid> <password>", cmd_wifi},
-    {"sysinfo","显示系统资源",        "sysinfo", cmd_sysinfo},
+    {"help",   "显示帮助信息",        "HELP [命令]", cmd_help},
+    {"dir",    "列出目录内容",        "DIR [路径]", cmd_ls},
+    {"type",   "显示文件内容",        "TYPE <文件>", cmd_cat},
+    {"cd",     "显示/切换目录",      "CD [路径]", cmd_cd},
+    {"cls",    "清屏",               "CLS", cmd_clear},
+    {"md",     "创建目录",           "MD <目录名>", cmd_mkdir},
+    {"del",    "删除文件或目录",      "DEL [-R] <路径>", cmd_rm},
+    {"ren",    "重命名文件",          "REN <旧名> <新名>", cmd_mv},
+    {"copy",   "复制文件",            "COPY <源> <目标>", cmd_cp},
+    {"ps",     "显示进程信息",        "PS", cmd_ps},
+    {"reboot", "重启系统",            "REBOOT", cmd_reboot},
+    {"touch",  "创建空文件",          "TOUCH <文件>", cmd_touch},
+    {"write",  "写入文件",            "WRITE <文件> <内容>", cmd_write},
+    {"exec",   "运行ELF程序",         "EXEC <ELF文件>", cmd_exec},
+    {"kill",   "终止进程",            "KILL <PID>", cmd_kill},
+    {"wifi",   "连接WiFi网络",        "WIFI <SSID> <PASSWORD>", cmd_wifi},
+    {"sysinfo","显示系统信息",        "SYSINFO", cmd_sysinfo},
     {NULL, NULL, NULL, NULL}
 };
 
 /* ---- ELF/进程命令 ---- */
 static void cmd_exec(shell_t *sh, int argc, char **argv)
 {
-    if (argc < 2) { term_puts(sh->term, "用法: exec <ELF文件>\n"); return; }
-    term_puts(sh->term, "正在加载: ");
-    term_puts(sh->term, argv[1]);
-    term_puts(sh->term, "\n");
+    if (argc < 2) { shell_puts(sh, "用法: exec <ELF文件>\n"); return; }
+    shell_puts(sh, "正在加载: ");
+    shell_puts(sh, argv[1]);
+    shell_puts(sh, "\n");
     int pid = proc_spawn_elf(argv[1], argc - 1, argv + 1);
     if (pid < 0) {
-        term_puts(sh->term, "加载失败\n");
+        shell_puts(sh, "加载失败\n");
         return;
     }
     char buf[64];
     snprintf(buf, sizeof(buf), "PID=%d running, wait...\n", pid);
-    term_puts(sh->term, buf);
+    shell_puts(sh, buf);
     int code;
     uint16_t done = proc_wait_any(&code);
     snprintf(buf, sizeof(buf), "PID=%d exit (code=%d)\n", done, code);
-    term_puts(sh->term, buf);
+    shell_puts(sh, buf);
 }
 
 static void cmd_kill(shell_t *sh, int argc, char **argv)
 {
-    if (argc < 2) { term_puts(sh->term, "用法: kill <PID>\n"); return; }
+    if (argc < 2) { shell_puts(sh, "用法: kill <PID>\n"); return; }
     int pid = atoi(argv[1]);
     if (proc_kill(pid) == 0)
-        term_puts(sh->term, "已终止\n");
+        shell_puts(sh, "已终止\n");
     else
-        term_puts(sh->term, "进程不存在\n");
+        shell_puts(sh, "进程不存在\n");
 }
 
 /* ---- 命令实现 ---- */
 
 static void cmd_help(shell_t *sh, int argc, char **argv)
 {
-    term_puts(sh->term, "\nOpenCrab - 可用命令:\n");
-    term_puts(sh->term, "================================\n");
+    shell_puts(sh, "\nOpenCrab-DOS - 可用命令:\n");
+    shell_puts(sh, "================================\n");
 
     if (argc > 1) {
+        char cmd[32];
+        strncpy(cmd, argv[1], sizeof(cmd) - 1);
+        cmd[sizeof(cmd) - 1] = '\0';
+        for (int i = 0; cmd[i]; i++) cmd[i] = tolower((unsigned char)cmd[i]);
         for (int i = 0; cmd_table[i].name; i++) {
-            if (strcmp(argv[1], cmd_table[i].name) == 0) {
-                term_puts(sh->term, cmd_table[i].name);
-                term_puts(sh->term, " - ");
-                term_puts(sh->term, cmd_table[i].desc);
-                term_puts(sh->term, "\n  用法: ");
-                term_puts(sh->term, cmd_table[i].usage);
-                term_puts(sh->term, "\n");
+            if (strcmp(cmd, cmd_table[i].name) == 0) {
+                char up[32];
+                strcpy(up, cmd_table[i].name);
+                for (int j = 0; up[j]; j++) up[j] = toupper((unsigned char)up[j]);
+                shell_puts(sh, up);
+                shell_puts(sh, " - ");
+                shell_puts(sh, cmd_table[i].desc);
+                shell_puts(sh, "\n  用法: ");
+                shell_puts(sh, cmd_table[i].usage);
+                shell_puts(sh, "\n");
                 return;
             }
         }
-        term_puts(sh->term, "未知命令: ");
-        term_puts(sh->term, argv[1]);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "未知命令: ");
+        shell_puts(sh, argv[1]);
+        shell_puts(sh, "\n");
         return;
     }
 
     for (int i = 0; cmd_table[i].name; i++) {
-        term_puts(sh->term, "  ");
-        term_puts(sh->term, cmd_table[i].name);
+        shell_puts(sh, "  ");
+        char up[16];
+        strcpy(up, cmd_table[i].name);
+        for (int j = 0; up[j]; j++) up[j] = toupper((unsigned char)up[j]);
+        shell_puts(sh, up);
         int pad = 10 - strlen(cmd_table[i].name);
         if (pad < 1) pad = 1;
         char buf[16];
         memset(buf, ' ', pad);
         buf[pad] = '\0';
-        term_puts(sh->term, buf);
-        term_puts(sh->term, cmd_table[i].desc);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, buf);
+        shell_puts(sh, cmd_table[i].desc);
+        shell_puts(sh, "\n");
     }
 }
 
@@ -151,30 +190,30 @@ static void cmd_ls(shell_t *sh, int argc, char **argv)
 
     vfs_dir_t *dir = vfs_opendir(path);
     if (!dir) {
-        term_puts(sh->term, "无法打开目录: ");
-        term_puts(sh->term, path);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "无法打开目录: ");
+        shell_puts(sh, path);
+        shell_puts(sh, "\n");
         return;
     }
 
     vfs_dirent_t *entry;
     while ((entry = vfs_readdir(dir)) != NULL) {
         if (!long_format) {
-            term_puts(sh->term, entry->name);
-            term_puts(sh->term, "  ");
+            shell_puts(sh, entry->name);
+            shell_puts(sh, "  ");
         } else {
-            term_puts(sh->term, entry->type == VFS_DIR ? "d" : "-");
-            term_puts(sh->term, "rw-r--r-- ");
+            shell_puts(sh, entry->type == VFS_DIR ? "d" : "-");
+            shell_puts(sh, "rw-r--r-- ");
             char size_str[16];
             snprintf(size_str, sizeof(size_str), "%8lu ", (unsigned long)entry->size);
-            term_puts(sh->term, size_str);
-            term_puts(sh->term, entry->name);
-            term_puts(sh->term, "\n");
+            shell_puts(sh, size_str);
+            shell_puts(sh, entry->name);
+            shell_puts(sh, "\n");
         }
     }
 
     if (!long_format) {
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "\n");
     }
 
     vfs_closedir(dir);
@@ -183,15 +222,15 @@ static void cmd_ls(shell_t *sh, int argc, char **argv)
 static void cmd_cat(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        term_puts(sh->term, "用法: cat <文件>\n");
+        shell_puts(sh, "用法: cat <文件>\n");
         return;
     }
 
     vfs_file_t *file = vfs_open(argv[1], VFS_O_RDONLY);
     if (!file) {
-        term_puts(sh->term, "无法打开文件: ");
-        term_puts(sh->term, argv[1]);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "无法打开文件: ");
+        shell_puts(sh, argv[1]);
+        shell_puts(sh, "\n");
         return;
     }
 
@@ -199,11 +238,11 @@ static void cmd_cat(shell_t *sh, int argc, char **argv)
     int bytes;
     while ((bytes = vfs_read(file, buf, sizeof(buf) - 1)) > 0) {
         buf[bytes] = '\0';
-        term_puts(sh->term, buf);
+        shell_puts(sh, buf);
     }
 
     if (bytes < 0) {
-        term_puts(sh->term, "\n读取错误\n");
+        shell_puts(sh, "\n读取错误\n");
     }
 
     vfs_close(file);
@@ -211,40 +250,38 @@ static void cmd_cat(shell_t *sh, int argc, char **argv)
 
 static void cmd_cd(shell_t *sh, int argc, char **argv)
 {
-    const char *path = (argc > 1) ? argv[1] : "/";
+    if (argc < 2) {
+        shell_puts(sh, sh->cwd);
+        shell_puts(sh, "\n");
+        return;
+    }
+    const char *path = argv[1];
     if (vfs_chdir(path) != 0) {
-        term_puts(sh->term, "目录不存在: ");
-        term_puts(sh->term, path);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "目录不存�? ");
+        shell_puts(sh, path);
+        shell_puts(sh, "\n");
         return;
     }
     vfs_getcwd(sh->cwd, sizeof(sh->cwd));
 }
 
-static void cmd_pwd(shell_t *sh, int argc, char **argv)
-{
-    (void)argc; (void)argv;
-    term_puts(sh->term, sh->cwd);
-    term_puts(sh->term, "\n");
-}
-
 static void cmd_mkdir(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        term_puts(sh->term, "用法: mkdir <目录名>\n");
+        shell_puts(sh, "用法: mkdir <目录�?\n");
         return;
     }
     if (vfs_mkdir(argv[1]) != 0) {
-        term_puts(sh->term, "创建目录失败: ");
-        term_puts(sh->term, argv[1]);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "创建目录失败: ");
+        shell_puts(sh, argv[1]);
+        shell_puts(sh, "\n");
     }
 }
 
 static void cmd_rm(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        term_puts(sh->term, "用法: rm [-r] <路径>\n");
+        shell_puts(sh, "用法: rm [-r] <路径>\n");
         return;
     }
 
@@ -254,7 +291,7 @@ static void cmd_rm(shell_t *sh, int argc, char **argv)
         recursive = 1;
         path = (argc > 2) ? argv[2] : NULL;
         if (!path) {
-            term_puts(sh->term, "用法: rm [-r] <路径>\n");
+            shell_puts(sh, "用法: rm [-r] <路径>\n");
             return;
         }
     }
@@ -262,15 +299,15 @@ static void cmd_rm(shell_t *sh, int argc, char **argv)
     if (!recursive) {
         vfs_stat_t st;
         if (vfs_stat(path, &st) == 0 && st.type == VFS_DIR) {
-            term_puts(sh->term, "是目录, 使用 rm -r 删除\n");
+            shell_puts(sh, "是目�? 使用 rm -r 删除\n");
             return;
         }
     }
 
     if (vfs_remove(path) != 0) {
-        term_puts(sh->term, "删除失败: ");
-        term_puts(sh->term, path);
-        term_puts(sh->term, "\n");
+        shell_puts(sh, "删除失败: ");
+        shell_puts(sh, path);
+        shell_puts(sh, "\n");
     }
 }
 
@@ -283,8 +320,8 @@ static void cmd_clear(shell_t *sh, int argc, char **argv)
 static void cmd_ps(shell_t *sh, int argc, char **argv)
 {
     (void)argc; (void)argv;
-    term_puts(sh->term, "PID  NAME          STATE\n");
-    term_puts(sh->term, "---  ------------  -----\n");
+    shell_puts(sh, "PID  NAME          STATE\n");
+    shell_puts(sh, "---  ------------  -----\n");
 
     TaskStatus_t *tasks = NULL;
     uint32_t total = uxTaskGetNumberOfTasks();
@@ -306,7 +343,7 @@ static void cmd_ps(shell_t *sh, int argc, char **argv)
                      (int)tasks[i].xTaskNumber,
                      tasks[i].pcTaskName,
                      state);
-            term_puts(sh->term, line);
+            shell_puts(sh, line);
         }
         free(tasks);
     }
@@ -315,7 +352,7 @@ static void cmd_ps(shell_t *sh, int argc, char **argv)
 static void cmd_reboot(shell_t *sh, int argc, char **argv)
 {
     (void)argc; (void)argv;
-    term_puts(sh->term, "系统将在3秒后重启...\n");
+    shell_puts(sh, "系统将在3秒后重启...\n");
     term_render(sh->term);
     vTaskDelay(pdMS_TO_TICKS(3000));
     esp_restart();
@@ -324,26 +361,26 @@ static void cmd_reboot(shell_t *sh, int argc, char **argv)
 static void cmd_touch(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        term_puts(sh->term, "用法: touch <文件>\n");
+        shell_puts(sh, "用法: touch <文件>\n");
         return;
     }
     vfs_file_t *f = vfs_open(argv[1], VFS_O_WRONLY | VFS_O_CREAT);
     if (f) {
         vfs_close(f);
     } else {
-        term_puts(sh->term, "创建文件失败\n");
+        shell_puts(sh, "创建文件失败\n");
     }
 }
 
 static void cmd_write(shell_t *sh, int argc, char **argv)
 {
     if (argc < 3) {
-        term_puts(sh->term, "用法: write <文件> <内容>\n");
+        shell_puts(sh, "用法: write <文件> <内容>\n");
         return;
     }
     vfs_file_t *f = vfs_open(argv[1], VFS_O_WRONLY | VFS_O_CREAT);
     if (!f) {
-        term_puts(sh->term, "打开文件失败\n");
+        shell_puts(sh, "打开文件失败\n");
         return;
     }
     vfs_write(f, argv[2], strlen(argv[2]));
@@ -354,30 +391,30 @@ static void cmd_write(shell_t *sh, int argc, char **argv)
 static void cmd_mv(shell_t *sh, int argc, char **argv)
 {
     if (argc < 3) {
-        term_puts(sh->term, "用法: mv <源> <目标>\n");
+        shell_puts(sh, "用法: mv <�? <目标>\n");
         return;
     }
     if (vfs_rename(argv[1], argv[2]) != 0) {
-        term_puts(sh->term, "移动/重命名失败\n");
+        shell_puts(sh, "移动/重命名失败\n");
     }
 }
 
 static void cmd_cp(shell_t *sh, int argc, char **argv)
 {
     if (argc < 3) {
-        term_puts(sh->term, "用法: cp <源> <目标>\n");
+        shell_puts(sh, "用法: cp <�? <目标>\n");
         return;
     }
 
     vfs_file_t *src = vfs_open(argv[1], VFS_O_RDONLY);
     if (!src) {
-        term_puts(sh->term, "无法打开源文件\n");
+        shell_puts(sh, "无法打开源文件\n");
         return;
     }
 
     vfs_file_t *dst = vfs_open(argv[2], VFS_O_WRONLY | VFS_O_CREAT);
     if (!dst) {
-        term_puts(sh->term, "无法创建目标文件\n");
+        shell_puts(sh, "无法创建目标文件\n");
         vfs_close(src);
         return;
     }
@@ -390,30 +427,30 @@ static void cmd_cp(shell_t *sh, int argc, char **argv)
 
     vfs_close(src);
     vfs_close(dst);
-    term_puts(sh->term, "复制完成\n");
+    shell_puts(sh, "复制完成\n");
 }
 
 /* ---- WiFi命令 ---- */
 static void cmd_wifi(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        /* 显示当前状态 */
+        /* 显示当前状�?*/
         wifi_ap_record_t ap;
         if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
             char line[128];
-            snprintf(line, sizeof(line), "已连接: %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
-            term_puts(sh->term, line);
+            snprintf(line, sizeof(line), "已连�? %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
+            shell_puts(sh, line);
         } else {
-            term_puts(sh->term, "未连接, 用法: wifi <ssid> <password>\n");
+            shell_puts(sh, "未连�? 用法: wifi <ssid> <password>\n");
         }
         return;
     }
     if (argc < 3) {
-        term_puts(sh->term, "用法: wifi <ssid> <password>\n");
+        shell_puts(sh, "用法: wifi <ssid> <password>\n");
         return;
     }
 
-    term_puts(sh->term, "正在连接WiFi...\n");
+    shell_puts(sh, "正在连接WiFi...\n");
     term_render(sh->term);
 
     wifi_config_t wifi_config = {
@@ -435,14 +472,14 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv)
         wifi_ap_record_t ap;
         if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
             char buf[64];
-            snprintf(buf, sizeof(buf), "已连接: %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
-            term_puts(sh->term, buf);
+            snprintf(buf, sizeof(buf), "已连�? %s (rssi=%d)\n", (char *)ap.ssid, ap.rssi);
+            shell_puts(sh, buf);
             term_render(sh->term);
             return;
         }
         vTaskDelay(pdMS_TO_TICKS(200));
     }
-    term_puts(sh->term, "连接超时\n");
+    shell_puts(sh, "连接超时\n");
     term_render(sh->term);
 }
 
@@ -458,22 +495,22 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     uint32_t flash_sz = 0;
     esp_flash_get_size(NULL, &flash_sz);
 
-    term_puts(sh->term, "-- CPU --\n");
+    shell_puts(sh, "-- CPU --\n");
     snprintf(line, sizeof(line), "ESP32-S3 rev%d  240MHz  %d核\n", chip.revision, chip.cores);
-    term_puts(sh->term, line);
+    shell_puts(sh, line);
 
     size_t total_int = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
     size_t free_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
-    term_puts(sh->term, "-- 内存 (片上512KB) --\n");
-    snprintf(line, sizeof(line), "堆: %dK/%dK (%d%%空闲)\n",
+    shell_puts(sh, "-- 内存 (片上512KB) --\n");
+    snprintf(line, sizeof(line), "�? %dK/%dK (%d%%空闲)\n",
              (int)(free_int / 1024), (int)(total_int / 1024),
              (int)(free_int * 100 / total_int));
-    term_puts(sh->term, line);
+    shell_puts(sh, line);
     snprintf(line, sizeof(line), "缓存+代码: %dK\n", (int)((512 - (int)total_int) / 1024));
-    term_puts(sh->term, line);
+    shell_puts(sh, line);
 
     /* 文件系统 */
     uint32_t fs_total = 0, fs_used = 0;
@@ -481,18 +518,18 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     uint32_t fs_free = fs_total - fs_used;
     int pct = fs_total > 0 ? (int)(fs_used * 100 / fs_total) : 0;
 
-    term_puts(sh->term, "-- 存储 --\n");
+    shell_puts(sh, "-- 存储 --\n");
     snprintf(line, sizeof(line), "Flash: %dMB   SPIFFS: %dKB\n",
              (int)(flash_sz / 1024 / 1024), (int)(fs_total / 1024));
-    term_puts(sh->term, line);
+    shell_puts(sh, line);
     snprintf(line, sizeof(line), "PSRAM: %dMB\n", (int)(total_psram / 1024 / 1024));
-    term_puts(sh->term, line);
+    shell_puts(sh, line);
     snprintf(line, sizeof(line), "SPIFFS空闲: %dK/%dK (%d%%)\n",
              (int)(fs_free / 1024), (int)(fs_total / 1024), pct);
-    term_puts(sh->term, line);
+    shell_puts(sh, line);
 }
 
-/* ---- 命令解析与执行 ---- */
+/* ---- 命令解析与执�?---- */
 
 static int split_command(const char *cmd, char **argv, int max_args)
 {
@@ -536,15 +573,16 @@ static void free_argv(char **argv, int argc)
     }
 }
 
-/* 颜色辅助函数 (定义在后面) */
+/* 颜色辅助函数 (定义在后�? */
 static void shell_set_input_color(shell_t *sh);
 static void shell_set_output_color(shell_t *sh);
 
 void shell_execute(shell_t *sh, const char *cmd)
 {
+    s_page_lines = 0;
     if (!cmd || cmd[0] == '\0' || cmd[0] == '#') return;
 
-    /* 添加到历史 */
+    /* 添加到历�?*/
     if (sh->history_count == 0 ||
         strcmp(sh->history[(sh->history_count - 1) % SHELL_HISTORY], cmd) != 0) {
         int idx = sh->history_count % SHELL_HISTORY;
@@ -553,8 +591,8 @@ void shell_execute(shell_t *sh, const char *cmd)
     }
     sh->history_pos = sh->history_count;
 
-    /* 先换行(提交带提示符颜色的行), 再切换为输出颜色 */
-    term_puts(sh->term, "\n");
+    /* 先换�?提交带提示符颜色的行), 再切换为输出颜色 */
+    shell_puts(sh, "\n");
     shell_set_output_color(sh);
 
     /* 解析命令 */
@@ -562,7 +600,7 @@ void shell_execute(shell_t *sh, const char *cmd)
     int argc = split_command(cmd, argv, MAX_ARGS);
     if (argc == 0) return;
 
-    /* 查找并执行 */
+    /* 查找并执�?*/
     int found = 0;
     for (int i = 0; cmd_table[i].name; i++) {
         if (strcmp(argv[0], cmd_table[i].name) == 0) {
@@ -573,7 +611,7 @@ void shell_execute(shell_t *sh, const char *cmd)
     }
 
     if (!found) {
-        /* 尝试从 /bin/ 加载 ELF 命令 */
+        /* 尝试�?/bin/ 加载 ELF 命令 */
         char elf_path[128];
         snprintf(elf_path, sizeof(elf_path), "/bin/%s", argv[0]);
         vfs_stat_t st;
@@ -582,36 +620,35 @@ void shell_execute(shell_t *sh, const char *cmd)
             if (pid > 0) {
                 char buf[32];
                 snprintf(buf, sizeof(buf), "PID=%d\n", pid);
-                term_puts(sh->term, buf);
+                shell_puts(sh, buf);
                 int code;
                 proc_wait_any(&code);
             } else {
-                term_puts(sh->term, "加载失败\n");
+                shell_puts(sh, "加载失败\n");
             }
         } else {
-            term_puts(sh->term, "命令未找到: ");
-            term_puts(sh->term, argv[0]);
-            term_puts(sh->term, "\n");
+            shell_puts(sh, "命令未找�? ");
+            shell_puts(sh, argv[0]);
+            shell_puts(sh, "\n");
         }
     }
 
     free_argv(argv, argc);
 }
 
-/* 设置提示符/输入颜色 (浅蓝) */
+/* 设置提示�?输入颜色 (浅蓝) */
 static void shell_set_input_color(shell_t *sh)
 {
     sh->term->fg_color = 8;
-    sh->term->fg_custom = COLOR_LIGHT_BLUE;
-    sh->term->line_fg_color[sh->term->current_line] = COLOR_LIGHT_BLUE;
+    sh->term->fg_custom = COLOR_DOS_GREEN;
+    sh->term->line_fg_color[sh->term->current_line] = COLOR_DOS_GREEN;
 }
 
-/* 设置输出颜色 (浅灰) */
 static void shell_set_output_color(shell_t *sh)
 {
     sh->term->fg_color = 8;
-    sh->term->fg_custom = 0xC618;
-    sh->term->line_fg_color[sh->term->current_line] = 0xC618;
+    sh->term->fg_custom = COLOR_DOS_GREEN;
+    sh->term->line_fg_color[sh->term->current_line] = COLOR_DOS_GREEN;
 }
 
 /* ---- 行编辑 ---- */
@@ -619,7 +656,7 @@ static void shell_set_output_color(shell_t *sh)
 void shell_print_prompt(shell_t *sh)
 {
     shell_set_input_color(sh);
-    term_puts(sh->term, SHELL_PROMPT);
+    shell_puts(sh, SHELL_PROMPT);
     sh->prompt_len = strlen(SHELL_PROMPT);
     sh->prompt_len *= 6;
 }
@@ -629,7 +666,7 @@ static void shell_redraw_input(shell_t *sh)
     term_clear_line(sh->term);
 
     shell_set_input_color(sh);
-    term_puts(sh->term, SHELL_PROMPT);
+    shell_puts(sh, SHELL_PROMPT);
     sh->prompt_len = strlen(SHELL_PROMPT) * 6;
 
     for (int i = 0; i < sh->input_len; i++) {
@@ -650,12 +687,12 @@ void shell_init(shell_t *sh, terminal_t *term)
 void shell_process_char(shell_t *sh, uint16_t ch)
 {
     if (ch == '\r' || ch == '\n') {
-        /* 跳过 CR/LF 双发导致的二次执行 (空行不产生新提示符) */
+        /* 跳过 CR/LF 双发导致的二次执�?(空行不产生新提示�? */
         if (sh->input_len == 0) return;
 
         sh->input_buf[sh->input_len] = '\0';
 
-        /* 转为UTF-8字符串 */
+        /* 转为UTF-8字符�?*/
         char utf8_cmd[MAX_CMD_LEN];
         int pos = 0;
         for (int i = 0; i < sh->input_len && pos < MAX_CMD_LEN - 4; i++) {
@@ -679,7 +716,7 @@ void shell_process_char(shell_t *sh, uint16_t ch)
         sh->input_len = 0;
         sh->input_cursor = 0;
 
-        /* 打印提示符 */
+        /* 打印提示�?*/
         shell_print_prompt(sh);
         term_render(sh->term);
         return;
@@ -695,7 +732,7 @@ void shell_process_char(shell_t *sh, uint16_t ch)
         return;
     }
 
-    /* 处理特殊键 (通过转义序列) */
+    /* 处理特殊�?(通过转义序列) */
     if (ch == 0x1B) {
         /* ESC序列 - 暂不处理箭头键等 */
         return;

@@ -36,5 +36,6 @@ void shell_process_char(shell_t *sh, uint16_t ch);
 void shell_print_prompt(shell_t *sh);
 void shell_execute(shell_t *sh, const char *cmd);
 void shell_show_help(shell_t *sh);
+void shell_puts(shell_t *sh, const char *s);
 
 #endif

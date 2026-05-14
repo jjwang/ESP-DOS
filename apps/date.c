@@ -3,6 +3,6 @@
 void _start(int argc, char **argv, syscall_t *sys)
 {
     (void)argc; (void)argv;
-    sys->println("OpenCrab Terminal v0.1.0");
+    sys->printf("Current date: %s %s\n", __DATE__, __TIME__);
     sys->exit(0);
 }

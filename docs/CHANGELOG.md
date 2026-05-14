@@ -1,5 +1,17 @@
 # 修订记录
 
+## 2026-05-14
+
+### 重构：OpenCrab → OpenCrab-DOS
+
+- `include/config.h`：系统改名为 OpenCrab-DOS，提示符改为 `A:\\>`
+- `kernel/shell.c`：命令表 DOS 化 — DIR/TYPE/CLS/MD/DEL/REN/COPY/HELP
+- 命令解析支持大小写不敏感
+- 增加分页输出（按任意键继续）
+- 全终端配色改为 DOS 经典绿 (0x07E0)
+- ELF 命令改名：DATE/MEM/VER/CHKDSK，输出格式 DOS 化
+- `kernel/vfs.c`：ELF 安装名同步更新，欢迎消息改 OpenCrab-DOS
+
 ## 2026-05-13
 
 ### 新增：TCA8418 键盘驱动 (TI TCA8418)

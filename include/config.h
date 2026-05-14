@@ -80,6 +80,7 @@
 #define COLOR_DARK_GRAY 0x4208
 #define COLOR_LIGHT_GRAY 0xC618  /* RGB565 浅灰 */
 #define COLOR_AMBER     0xFB60  /* 琥珀色 - 经典终端颜色 */
+#define COLOR_DOS_GREEN 0x07E0  /* DOS 经典绿 */
 
 /* ---- TCA8418 键盘 I2C 引脚 (I2C_NUM_1) ---- */
 #define CONFIG_I2C_SDA_PIN  4
@@ -90,14 +91,14 @@
 #define DS3231_I2C_SCL_PIN  16
 
 /* ---- 系统配置 ---- */
-#define SHELL_PROMPT    "$ "
-#define COLOR_LIGHT_BLUE  0x5DFF  /* 亮青色, 用于提示符和命令输入 */
+#define SHELL_PROMPT    "A:\\>"
+#define COLOR_LIGHT_BLUE  0x07E0  /* DOS 经典绿 */
 #define SHELL_HISTORY   16
 #define MAX_CMD_LEN     256
 #define MAX_ARGS        16
 
 /* ---- 文件名常量 ---- */
-#define VERSION_STR     "OpenCrab v0.1.0"
+#define VERSION_STR     "OpenCrab-DOS Version 1.0"
 #define BUILD_DATE      __DATE__ " " __TIME__
 
 #endif /* __CONFIG_H__ */

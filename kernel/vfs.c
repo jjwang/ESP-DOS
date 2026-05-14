@@ -152,8 +152,8 @@ int vfs_init(void)
     /* 创建欢迎文件 */
     FILE *f = fopen(SPIFFS_ROOT "/home/welcome.txt", "w");
     if (f) {
-        fprintf(f, "欢迎使用 OpenCrab!\n");
-        fprintf(f, "输入 help 查看可用命令。\n");
+        fprintf(f, "欢迎使用 OpenCrab-DOS!\n");
+        fprintf(f, "输入 HELP 查看可用命令。\n");
         fclose(f);
     }
 
@@ -169,13 +169,13 @@ int vfs_init(void)
     install_elf("date", elf_date_data, ELF_DATE_SIZE);
 #endif
 #ifdef ELF_FREE_DATA
-    install_elf("free", elf_free_data, ELF_FREE_SIZE);
+    install_elf("mem", elf_free_data, ELF_FREE_SIZE);
 #endif
 #ifdef ELF_UNAME_DATA
-    install_elf("uname", elf_uname_data, ELF_UNAME_SIZE);
+    install_elf("ver", elf_uname_data, ELF_UNAME_SIZE);
 #endif
 #ifdef ELF_DF_DATA
-    install_elf("df", elf_df_data, ELF_DF_SIZE);
+    install_elf("chkdsk", elf_df_data, ELF_DF_SIZE);
 #endif
 
     ESP_LOGI(TAG, "SPIFFS 初始化完成");

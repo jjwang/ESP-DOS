@@ -28,7 +28,7 @@
 static const char *TAG = "MAIN";
 
 static shell_t g_shell;
-static QueueHandle_t g_input_queue = NULL;
+QueueHandle_t g_input_queue = NULL;
 
 #define UART_QUEUE_SIZE 64
 
