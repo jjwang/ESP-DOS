@@ -128,10 +128,15 @@ static void shell_task(void *arg)
     term_puts(&g_terminal, "\n");
     term_render(&g_terminal);
 
+    /* 打印DOS欢迎信息 */
+    term_puts(&g_terminal, "OpenCrab-DOS Version 1.0\n");
+    term_puts(&g_terminal, "(C) Copyright OpenCrab 2026\n");
+    term_render(&g_terminal);
+
     /* Shell初始化 */
     shell_init(&g_shell, &g_terminal);
 
-    /* 打印欢迎和提示符 */
+    /* 打印提示符 */
     shell_print_prompt(&g_shell);
     term_render(&g_terminal);
 
@@ -181,8 +186,8 @@ static void show_splash(void)
     int lx = (TFT_WIDTH - logo_w) / 2;
     int ly = 20;
 
-    display_draw_large_text(lx + 1, ly + 1, "OpenCrab", 0x4208, COLOR_BLACK, 2);
-    display_draw_large_text(lx, ly, "OpenCrab", 0xFFFF, COLOR_BLACK, 2);
+    display_draw_large_text(lx + 1, ly + 1, "OpenCrab", 0x0140, COLOR_BLACK, 2);
+    display_draw_large_text(lx, ly, "OpenCrab", 0x07E0, COLOR_BLACK, 2);
 
     uint32_t flash_sz = 0;
     esp_flash_get_size(NULL, &flash_sz);
@@ -243,7 +248,7 @@ void app_main(void)
     display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);
     for (int i = 3; i > 0; i--) {
         snprintf(buf, sizeof(buf), "系统启动中, 剩余 %d 秒...  ", i);
-        display_draw_text(16, iy, buf, 0xFFFF, COLOR_BLACK);
+        display_draw_text(16, iy, buf, 0x07E0, COLOR_BLACK);
         display_flush_all();
         vTaskDelay(pdMS_TO_TICKS(1000));
         display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);

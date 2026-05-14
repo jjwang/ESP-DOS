@@ -21,6 +21,7 @@
 #include "display_st7789.h"
 #include "process.h"
 #include "vfs.h"
+#include "ds3231.h"
 
 /* 分页输出 */
 extern QueueHandle_t g_input_queue;
@@ -76,6 +77,8 @@ static void cmd_exec(shell_t *sh, int argc, char **argv);
 static void cmd_kill(shell_t *sh, int argc, char **argv);
 static void cmd_wifi(shell_t *sh, int argc, char **argv);
 static void cmd_sysinfo(shell_t *sh, int argc, char **argv);
+static void cmd_date(shell_t *sh, int argc, char **argv);
+static void cmd_time_cmd(shell_t *sh, int argc, char **argv);
 
 static const cmd_entry_t cmd_table[] = {
     {"help",   "显示帮助信息",        "HELP [命令]", cmd_help},
@@ -95,6 +98,8 @@ static const cmd_entry_t cmd_table[] = {
     {"kill",   "终止进程",            "KILL <PID>", cmd_kill},
     {"wifi",   "连接WiFi网络",        "WIFI <SSID> <PASSWORD>", cmd_wifi},
     {"sysinfo","显示系统信息",        "SYSINFO", cmd_sysinfo},
+    {"date",   "显示/设置日期",       "DATE [YYYY-MM-DD]", cmd_date},
+    {"time",   "显示/设置时间",       "TIME [HH:MM:SS]", cmd_time_cmd},
     {NULL, NULL, NULL, NULL}
 };
 
@@ -529,7 +534,139 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     shell_puts(sh, line);
 }
 
-/* ---- 命令解析与执�?---- */
+static void cmd_date(shell_t *sh, int argc, char **argv)
+{
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    const char *dow[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+    char buf[64];
+
+    if (argc > 1) {
+        int y, m, d;
+        if (sscanf(argv[1], "%d-%d-%d", &y, &m, &d) == 3) {
+            struct tm tm = {0};
+            tm.tm_year = y - 1900;
+            tm.tm_mon = m - 1;
+            tm.tm_mday = d;
+            tm.tm_hour = 12;
+            time_t t = mktime(&tm);
+            struct timeval tv = { .tv_sec = t, .tv_usec = 0 };
+            settimeofday(&tv, NULL);
+            ds3231_set_time(&tm);
+            shell_puts(sh, "Date set.\n");
+        } else {
+            shell_puts(sh, "Format: DATE YYYY-MM-DD\n");
+        }
+        return;
+    }
+
+    snprintf(buf, sizeof(buf), "Current date is: %s %02d-%02d-%04d\n",
+             dow[t->tm_wday], t->tm_mon + 1, t->tm_mday, t->tm_year + 1900);
+    shell_puts(sh, buf);
+    shell_puts(sh, "Enter new date (YYYY-MM-DD): ");
+    /* 非阻塞读取一行输入 */
+    uint16_t input[32];
+    int pos = 0;
+    while (1) {
+        uint16_t ch;
+        if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(5000)) == pdTRUE) {
+            if (ch == '\r' || ch == '\n') break;
+            if (ch == '\b' && pos > 0) { pos--; continue; }
+            if (pos < 30) input[pos++] = ch;
+        } else {
+            shell_puts(sh, "\n");
+            return;
+        }
+    }
+    input[pos] = 0;
+    char line[32];
+    for (int i = 0; i < pos; i++) line[i] = (char)input[i];
+    line[pos] = '\0';
+    shell_puts(sh, "\n");
+
+    int y, m, d;
+    if (pos > 0 && sscanf(line, "%d-%d-%d", &y, &m, &d) == 3) {
+        struct tm tm = {0};
+        tm.tm_year = y - 1900;
+        tm.tm_mon = m - 1;
+        tm.tm_mday = d;
+        tm.tm_hour = 12;
+        time_t t = mktime(&tm);
+        struct timeval tv = { .tv_sec = t, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        ds3231_set_time(&tm);
+        shell_puts(sh, "Date set.\n");
+    } else if (pos > 0) {
+        shell_puts(sh, "Invalid format.\n");
+    }
+}
+
+static void cmd_time_cmd(shell_t *sh, int argc, char **argv)
+{
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char buf[64];
+
+    if (argc > 1) {
+        int h, m, s;
+        if (sscanf(argv[1], "%d:%d:%d", &h, &m, &s) == 3) {
+            now = time(NULL);
+            t = localtime(&now);
+            t->tm_hour = h;
+            t->tm_min = m;
+            t->tm_sec = s;
+            time_t t2 = mktime(t);
+            struct timeval tv = { .tv_sec = t2, .tv_usec = 0 };
+            settimeofday(&tv, NULL);
+            ds3231_set_time(t);
+            shell_puts(sh, "Time set.\n");
+        } else {
+            shell_puts(sh, "Format: TIME HH:MM:SS\n");
+        }
+        return;
+    }
+
+    snprintf(buf, sizeof(buf), "Current time is: %02d:%02d:%02d\n",
+             t->tm_hour, t->tm_min, t->tm_sec);
+    shell_puts(sh, buf);
+    shell_puts(sh, "Enter new time (HH:MM:SS): ");
+    uint16_t input[32];
+    int pos = 0;
+    while (1) {
+        uint16_t ch;
+        if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(5000)) == pdTRUE) {
+            if (ch == '\r' || ch == '\n') break;
+            if (ch == '\b' && pos > 0) { pos--; continue; }
+            if (pos < 30) input[pos++] = ch;
+        } else {
+            shell_puts(sh, "\n");
+            return;
+        }
+    }
+    input[pos] = 0;
+    char line[32];
+    for (int i = 0; i < pos; i++) line[i] = (char)input[i];
+    line[pos] = '\0';
+    shell_puts(sh, "\n");
+
+    int h, m, s;
+    if (pos > 0 && sscanf(line, "%d:%d:%d", &h, &m, &s) == 3) {
+        now = time(NULL);
+        t = localtime(&now);
+        t->tm_hour = h;
+        t->tm_min = m;
+        t->tm_sec = s;
+        time_t t2 = mktime(t);
+        struct timeval tv = { .tv_sec = t2, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        ds3231_set_time(t);
+        shell_puts(sh, "Time set.\n");
+    } else if (pos > 0) {
+        shell_puts(sh, "Invalid format.\n");
+    }
+}
+
+/* ---- 命令解析与执行 ---- */
 
 static int split_command(const char *cmd, char **argv, int max_args)
 {

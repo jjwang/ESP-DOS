@@ -2,6 +2,14 @@
 
 ## 2026-05-14
 
+### 新增：DATE/TIME 命令及 DOS 欢迎界面
+
+- `kernel/shell.c`：内置 DATE/TIME 命令，支持 DOS 风格交互设置
+- 启动时终端显示 `OpenCrab-DOS Version 1.0` + 版权信息
+- `kernel/main.c`：首屏 OpenCrab logo 改为 DOS 经典绿
+- `kernel/terminal.c`：光标改为 DOS 下划线风格 (6px宽)
+- 所有输出配色改为 DOS 经典绿
+
 ### 重构：OpenCrab → OpenCrab-DOS
 
 - `include/config.h`：系统改名为 OpenCrab-DOS，提示符改为 `A:\\>`

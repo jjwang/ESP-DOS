@@ -152,8 +152,8 @@ int vfs_init(void)
     /* 创建欢迎文件 */
     FILE *f = fopen(SPIFFS_ROOT "/home/welcome.txt", "w");
     if (f) {
-        fprintf(f, "欢迎使用 OpenCrab-DOS!\n");
-        fprintf(f, "输入 HELP 查看可用命令。\n");
+        fprintf(f, "OpenCrab-DOS Version 1.0\n");
+        fprintf(f, "(C) Copyright OpenCrab 2026\n");
         fclose(f);
     }
 

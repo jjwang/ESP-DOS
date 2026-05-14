@@ -333,10 +333,10 @@ void term_render(terminal_t *term)
     }
 
     if (vis_cursor_row >= 0 && blink_on) {
-        int cy = vis_cursor_row * TERM_LINE_H;
+        int cy = vis_cursor_row * TERM_LINE_H + TERM_FONT_H - 3;
         int cx = term->cursor_x;
         if (cx < TFT_WIDTH - 2) {
-            display_fill_rect(cx, cy, 2, TERM_FONT_H, fg);
+            display_fill_rect(cx, cy + 1, 6, 2, fg);
         }
     }
 
