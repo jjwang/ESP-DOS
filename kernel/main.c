@@ -114,22 +114,14 @@ static void shell_task(void *arg)
     (void)arg;
 
     /* 初始化文件系统 */
-    if (vfs_init() != 0) {
-        term_puts(&g_terminal, "文件系统初始化失败!\n");
-    } else {
-        uint32_t total = 0, used = 0;
-        vfs_info(&total, &used);
-        char info[128];
-        snprintf(info, sizeof(info), "文件系统就绪: %dK / %dK\n",
-                 (int)(used / 1024), (int)(total / 1024));
-        term_puts(&g_terminal, info);
-    }
+    vfs_init();
 
-    term_puts(&g_terminal, "\n");
     term_render(&g_terminal);
 
-    /* 打印DOS欢迎信息 */
-    term_puts(&g_terminal, "OpenCrab-DOS Version 1.0\n");
+    /* 打印DOS欢迎信息 (绿色) */
+    g_terminal.fg_color = 8;
+    g_terminal.fg_custom = COLOR_DOS_GREEN;
+    term_puts(&g_terminal, "ESP-DOS Version 1.0\n");
     term_puts(&g_terminal, "(C) Copyright OpenCrab 2026\n");
     term_render(&g_terminal);
 
@@ -180,14 +172,14 @@ static void show_splash(void)
 {
     display_fill(COLOR_BLACK);
 
-    /* OpenCrab Logo 2倍大小 */
+    /* Jaycomp Logo 2倍大小 */
     int logo_w = 8 * 6 * 2;   /* 96px */
     int logo_h = 12 * 2;      /* 24px */
     int lx = (TFT_WIDTH - logo_w) / 2;
     int ly = 20;
 
-    display_draw_large_text(lx + 1, ly + 1, "OpenCrab", 0x0140, COLOR_BLACK, 2);
-    display_draw_large_text(lx, ly, "OpenCrab", 0x07E0, COLOR_BLACK, 2);
+    display_draw_large_text(lx + 1, ly + 1, "Jaycomp", 0x0140, COLOR_BLACK, 2);
+    display_draw_large_text(lx, ly, "Jaycomp", 0x07E0, COLOR_BLACK, 2);
 
     uint32_t flash_sz = 0;
     esp_flash_get_size(NULL, &flash_sz);

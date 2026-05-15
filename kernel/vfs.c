@@ -97,6 +97,47 @@ static void strip_prefix(const char *real, char *vpath, int size)
     }
 }
 
+/* ---- 文件注册表 (替代 SPIFFS readdir) ---- */
+#define MAX_REG 128
+typedef struct {
+    char name[64];
+    uint16_t type;
+} reg_entry_t;
+static reg_entry_t s_registry[MAX_REG];
+static int s_reg_count = 0;
+
+static int reg_find(const char *name)
+{
+    for (int i = 0; i < s_reg_count; i++)
+        if (strcmp(s_registry[i].name, name) == 0) return i;
+    return -1;
+}
+
+static void reg_add(const char *name, uint16_t type)
+{
+    if (reg_find(name) >= 0) return;
+    if (s_reg_count >= MAX_REG) return;
+    strncpy(s_registry[s_reg_count].name, name, sizeof(s_registry[s_reg_count].name) - 1);
+    s_registry[s_reg_count].type = type;
+    s_reg_count++;
+    /* 同时添加父目录 */
+    char buf[64];
+    strncpy(buf, name, sizeof(buf) - 1);
+    char *p = strrchr(buf, '/');
+    if (p && p != buf) {
+        *p = '\0';
+        reg_add(buf, VFS_DIR);
+    }
+}
+
+static void reg_remove(const char *name)
+{
+    int i = reg_find(name);
+    if (i < 0) return;
+    s_reg_count--;
+    s_registry[i] = s_registry[s_reg_count];
+}
+
 /* 安装内嵌 ELF 文件到 /bin/ */
 static void install_elf(const char *name, const uint8_t *data, uint32_t size)
 {
@@ -108,13 +149,16 @@ static void install_elf(const char *name, const uint8_t *data, uint32_t size)
         fclose(f);
         ESP_LOGI(TAG, "安装命令: /bin/%s (%d bytes)", name, size);
     }
+    char vpath[64];
+    snprintf(vpath, sizeof(vpath), "/bin/%s", name);
+    reg_add(vpath, VFS_FILE);
 }
 
 /* ---- 公共API ---- */
 
 int vfs_init(void)
 {
-    ESP_LOGI(TAG, "初始化SPIFFS文件系统...");
+    ESP_LOGI(TAG, "mount spiffs");
 
     esp_vfs_spiffs_conf_t conf = {
         .base_path = SPIFFS_ROOT,
@@ -136,16 +180,25 @@ int vfs_init(void)
     size_t total = 0, used = 0;
     ret = esp_spiffs_info("littlefs", &total, &used);
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "SPIFFS: 总空间 %d KB, 已用 %d KB", (int)(total / 1024), (int)(used / 1024));
+        ESP_LOGI(TAG, "mount ok (%dK/%dK)", (int)(total / 1024), (int)(used / 1024));
     }
 
     g_mounted = 1;
 
-    /* 确保根目录存在 */
+    /* 初始化文件注册表 */
+    reg_add("/", VFS_DIR);
+    reg_add("/bin", VFS_DIR);
+    reg_add("/home", VFS_DIR);
+    reg_add("/tmp", VFS_DIR);
+    reg_add("/etc", VFS_DIR);
+    reg_add("/dev", VFS_DIR);
+    reg_add("/mnt", VFS_DIR);
+
+    /* 确保 /bin 存在 (SPIFFS镜像已含ELF文件, 但格式化后需要重建) */
+    mkdir(SPIFFS_ROOT "/bin", 0777);
     mkdir(SPIFFS_ROOT "/home", 0777);
     mkdir(SPIFFS_ROOT "/tmp", 0777);
     mkdir(SPIFFS_ROOT "/etc", 0777);
-    mkdir(SPIFFS_ROOT "/bin", 0777);
     mkdir(SPIFFS_ROOT "/dev", 0777);
     mkdir(SPIFFS_ROOT "/mnt", 0777);
 
@@ -155,9 +208,10 @@ int vfs_init(void)
         fprintf(f, "OpenCrab-DOS Version 1.0\n");
         fprintf(f, "(C) Copyright OpenCrab 2026\n");
         fclose(f);
+        reg_add("/home/welcome.txt", VFS_FILE);
     }
 
-    /* 确保 /bin 存在 (SPIFFS镜像已含ELF文件, 但格式化后需要重建) */
+    /* 安装 ELF 命令 */
     mkdir(SPIFFS_ROOT "/bin", 0777);
 #ifdef ELF_ECHO_DATA
     install_elf("echo", elf_echo_data, ELF_ECHO_SIZE);
@@ -178,7 +232,7 @@ int vfs_init(void)
     install_elf("chkdsk", elf_df_data, ELF_DF_SIZE);
 #endif
 
-    ESP_LOGI(TAG, "SPIFFS 初始化完成");
+    ESP_LOGI(TAG, "SPIFFS ready");
     return 0;
 }
 
@@ -308,56 +362,75 @@ int vfs_exists(const char *path)
     return (vfs_stat(path, &st) == 0);
 }
 
+/* 目录流 (全局单例) */
+static vfs_dir_t s_dir;
+
 vfs_dir_t *vfs_opendir(const char *path)
 {
     if (!g_mounted) return NULL;
 
-    char real[256];
-    real_path(path, real, sizeof(real));
-
-    DIR *dir = opendir(real);
-    if (!dir) return NULL;
-
-    vfs_dir_t *vd = calloc(1, sizeof(vfs_dir_t));
-    if (!vd) { closedir(dir); return NULL; }
-
-    real_path(path, vd->path, sizeof(vd->path));
-
-    int count = 0;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL && count < 64) {
-        strncpy(vd->entries[count].name, entry->d_name, sizeof(vd->entries[count].name) - 1);
-        vd->entries[count].name[sizeof(vd->entries[count].name) - 1] = '\0';
-
-        char full[512];
-        snprintf(full, sizeof(full), "%s/%s", real, entry->d_name);
-        struct stat st;
-        if (stat(full, &st) == 0) {
-            vd->entries[count].type = S_ISDIR(st.st_mode) ? VFS_DIR : VFS_FILE;
-            vd->entries[count].size = (uint32_t)st.st_size;
-        } else {
-            vd->entries[count].type = VFS_FILE;
-            vd->entries[count].size = 0;
-        }
-        count++;
+    /* 规范化路径 */
+    char norm[256];
+    if (path[0] == '/') {
+        strncpy(norm, path, sizeof(norm) - 1);
+    } else if (path[0] == '.' && path[1] == '\0') {
+        snprintf(norm, sizeof(norm), "%s", g_cwd);
+    } else if (path[0] == '.' && path[1] == '.' && path[2] == '\0') {
+        strncpy(norm, g_cwd, sizeof(norm) - 1);
+        char *p = strrchr(norm, '/');
+        if (p && p != norm) *p = '\0';
+        else norm[1] = '\0';
+    } else {
+        snprintf(norm, sizeof(norm), "%s/%s", g_cwd, path);
     }
-    closedir(dir);
+    int nlen = strlen(norm);
+    while (nlen > 1 && norm[nlen - 1] == '/') { norm[--nlen] = '\0'; }
 
-    vd->entry_count = count;
-    vd->index = 0;
-    return vd;
+    memset(&s_dir, 0, sizeof(s_dir));
+    strncpy(s_dir.path, norm, sizeof(s_dir.path) - 1);
+
+    /* 遍历注册表, 返回 norm 的直接子项 */
+    for (int i = 0; i < s_reg_count && s_dir.entry_count < 64; i++) {
+        const char *full = s_registry[i].name;
+        if (strcmp(full, norm) == 0) continue;            /* 跳过自身 */
+        if (strncmp(full, norm, nlen) != 0) continue;      /* 前缀不匹配 */
+        if (full[nlen] == '\0') continue;                  /* 完全匹配(已被跳过) */
+        if (nlen > 1 && full[nlen] != '/') continue;       /* 非根目录需要 / 分隔 */
+        const char *rest = full + nlen;
+        if (*rest == '/') rest++;
+        if (strchr(rest, '/')) continue;                    /* 更深层子项, 跳过 */
+        int idx = s_dir.entry_count;
+        strncpy(s_dir.entries[idx].name, rest,
+                sizeof(s_dir.entries[idx].name) - 1);
+        s_dir.entries[idx].name[sizeof(s_dir.entries[idx].name) - 1] = '\0';
+        s_dir.entries[idx].type = s_registry[i].type;
+        s_dir.entries[idx].size = 0;
+        /* 获取文件实际大小 */
+        if (s_registry[i].type == VFS_FILE) {
+            char fpath[128];
+            real_path(full, fpath, sizeof(fpath));
+            struct stat st;
+            if (stat(fpath, &st) == 0)
+                s_dir.entries[idx].size = (uint32_t)st.st_size;
+        }
+        s_dir.entry_count++;
+    }
+
+    s_dir.index = 0;
+    return &s_dir;
 }
 
 vfs_dirent_t *vfs_readdir(vfs_dir_t *dir)
 {
-    if (!dir || dir->index >= dir->entry_count) return NULL;
+    if (!dir) return NULL;
+    if (dir->index >= dir->entry_count) return NULL;
     return &dir->entries[dir->index++];
 }
 
 int vfs_closedir(vfs_dir_t *dir)
 {
     if (!dir) return -1;
-    free(dir);
+    memset(dir, 0, sizeof(*dir));
     return 0;
 }
 

@@ -158,7 +158,7 @@ void term_newline(terminal_t *term)
     if (term->cursor_y + TERM_LINE_H > TFT_HEIGHT) {
         term->cursor_y = (TERM_ROWS - 1) * TERM_LINE_H;
         /* 向前滚动 */
-        term->visible_start = (term->scrollback_head - TERM_ROWS + TERM_SCROLLBACK) % TERM_SCROLLBACK;
+        term->visible_start = (term->scrollback_head - TERM_ROWS + 1 + TERM_SCROLLBACK) % TERM_SCROLLBACK;
         if (term->visible_start < 0) term->visible_start += TERM_SCROLLBACK;
     }
 

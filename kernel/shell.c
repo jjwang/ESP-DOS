@@ -25,31 +25,10 @@
 
 /* 分页输出 */
 extern QueueHandle_t g_input_queue;
-static int s_page_lines = 0;
 
 void shell_puts(shell_t *sh, const char *s)
 {
     term_puts(sh->term, s);
-    for (const char *p = s; *p; p++) {
-        if (*p == '\n') {
-            s_page_lines++;
-            if (s_page_lines >= TERM_ROWS - 2) {
-                term_puts(sh->term, "-- 按任意键继续 --");
-                uint16_t ch;
-                xQueueReceive(g_input_queue, &ch, portMAX_DELAY);
-                (void)ch;
-                s_page_lines = 0;
-                char clr[32];
-                int len = strlen("-- 按任意键继续 --");
-                memset(clr, '\b', len); clr[len] = '\0';
-                term_puts(sh->term, clr);
-                memset(clr, ' ', len); clr[len] = '\0';
-                term_puts(sh->term, clr);
-                memset(clr, '\b', len); clr[len] = '\0';
-                term_puts(sh->term, clr);
-            }
-        }
-    }
 }
 
 /* ---- 命令�?---- */
@@ -186,40 +165,38 @@ static void cmd_help(shell_t *sh, int argc, char **argv)
 static void cmd_ls(shell_t *sh, int argc, char **argv)
 {
     const char *path = (argc > 1) ? argv[1] : ".";
-    int long_format = 0;
-
-    if (argc > 1 && strcmp(argv[1], "-l") == 0) {
-        long_format = 1;
-        path = (argc > 2) ? argv[2] : ".";
-    }
+    char buf[256];
 
     vfs_dir_t *dir = vfs_opendir(path);
     if (!dir) {
-        shell_puts(sh, "无法打开目录: ");
-        shell_puts(sh, path);
-        shell_puts(sh, "\n");
+        snprintf(buf, sizeof(buf), "File not found - %s\n", path);
+        shell_puts(sh, buf);
         return;
     }
 
+    /* 将路径转换为DOS风格 */
+    char dos_path[128];
+    strncpy(dos_path, path, sizeof(dos_path) - 1);
+    for (int i = 0; dos_path[i]; i++)
+        if (dos_path[i] == '/') dos_path[i] = '\\';
+    snprintf(buf, sizeof(buf), " Directory of %s\n", dos_path);
+    shell_puts(sh, buf);
+    shell_puts(sh, "\n");
+
+    int total_files = 0;
     vfs_dirent_t *entry;
     while ((entry = vfs_readdir(dir)) != NULL) {
-        if (!long_format) {
-            shell_puts(sh, entry->name);
-            shell_puts(sh, "  ");
+        if (entry->type == VFS_DIR) {
+            snprintf(buf, sizeof(buf), "        <DIR>  %s\n", entry->name);
         } else {
-            shell_puts(sh, entry->type == VFS_DIR ? "d" : "-");
-            shell_puts(sh, "rw-r--r-- ");
-            char size_str[16];
-            snprintf(size_str, sizeof(size_str), "%8lu ", (unsigned long)entry->size);
-            shell_puts(sh, size_str);
-            shell_puts(sh, entry->name);
-            shell_puts(sh, "\n");
+            snprintf(buf, sizeof(buf), "       %8lu  %s\n", (unsigned long)entry->size, entry->name);
         }
+        shell_puts(sh, buf);
+        total_files++;
     }
 
-    if (!long_format) {
-        shell_puts(sh, "\n");
-    }
+    snprintf(buf, sizeof(buf), "%8d File(s)\n\n", total_files);
+    shell_puts(sh, buf);
 
     vfs_closedir(dir);
 }
@@ -256,7 +233,11 @@ static void cmd_cat(shell_t *sh, int argc, char **argv)
 static void cmd_cd(shell_t *sh, int argc, char **argv)
 {
     if (argc < 2) {
-        shell_puts(sh, sh->cwd);
+        char dos[128];
+        strncpy(dos, sh->cwd, sizeof(dos) - 1);
+        for (int i = 0; dos[i]; i++)
+            if (dos[i] == '/') dos[i] = '\\';
+        shell_puts(sh, dos);
         shell_puts(sh, "\n");
         return;
     }
@@ -714,10 +695,17 @@ static void free_argv(char **argv, int argc)
 static void shell_set_input_color(shell_t *sh);
 static void shell_set_output_color(shell_t *sh);
 
-void shell_execute(shell_t *sh, const char *cmd)
+void shell_execute(shell_t *sh, const char *cmd_in)
 {
-    s_page_lines = 0;
-    if (!cmd || cmd[0] == '\0' || cmd[0] == '#') return;
+    if (!cmd_in || cmd_in[0] == '\0' || cmd_in[0] == '#') return;
+
+    /* DOS路径转Unix: \ → / */
+    char cmd_buf[MAX_CMD_LEN];
+    strncpy(cmd_buf, cmd_in, sizeof(cmd_buf) - 1);
+    cmd_buf[sizeof(cmd_buf) - 1] = '\0';
+    for (int i = 0; cmd_buf[i]; i++)
+        if (cmd_buf[i] == '\\') cmd_buf[i] = '/';
+    const char *cmd = cmd_buf;
 
     /* 添加到历�?*/
     if (sh->history_count == 0 ||
@@ -853,7 +841,7 @@ void shell_process_char(shell_t *sh, uint16_t ch)
         sh->input_len = 0;
         sh->input_cursor = 0;
 
-        /* 打印提示�?*/
+        /* 打印提示符 */
         shell_print_prompt(sh);
         term_render(sh->term);
         return;

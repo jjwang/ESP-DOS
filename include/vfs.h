@@ -38,6 +38,7 @@ typedef struct vfs_dir_s {
     int index;
     vfs_dirent_t entries[64];
     int entry_count;
+    void *dp;  /* POSIX DIR* */
 } vfs_dir_t;
 
 /* 文件流 */
