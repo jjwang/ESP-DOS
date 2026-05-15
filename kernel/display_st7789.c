@@ -351,12 +351,12 @@ int display_draw_char_cn(int x, int y, uint16_t unicode, uint16_t fg, uint16_t b
         int ch = (unicode >= 0x20 && unicode <= 0x7E) ? unicode : ' ';
         int idx = ch - 0x20;
         if (idx < 0 || idx >= FONT_6X12_COUNT) return 12;
-
+        int xoff = (ch == ':') ? 1 : 0;
         for (int row = 0; row < FONT_6X12_H; row++) {
             uint8_t bits = font_6x12[idx][row];
             for (int col = 0; col < FONT_6X12_W; col++) {
                 uint16_t color = (bits & (0x80 >> col)) ? fg : bg;
-                display_draw_pixel(x + col, y + row, color);
+                display_draw_pixel(x + xoff + col, y + row, color);
             }
         }
         return 6;

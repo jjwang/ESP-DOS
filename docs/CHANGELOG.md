@@ -2,12 +2,15 @@
 
 ## 2026-05-15
 
-### 修复：DIR 命令及终端滚动显示
+### 修复：CD 命令、提示符、SPIFFS readdir、中文字符损坏
 
-- `kernel/vfs.c`：用文件注册表替代 SPIFFS readdir，根除遍历卡死
-- DIR 命令使用 DOS 格式输出，显示文件实际大小
-- `kernel/terminal.c`：修复可见窗口起始位置，确保提示符始终显示
-- DOS 路径分隔符支持（`\` 输入转 `/`，`/` 显示转 `\`）
+- `kernel/vfs.c`：用文件注册表替代 SPIFFS readdir 遍历目录，根除卡死
+- `vfs_chdir` 改用注册表查找路径，修复根目录路径拼接 `//` 问题
+- `kernel/shell.c`：提示符 `A:\>` 随当前目录变化（`CD \bin` → `A:\BIN\>`）
+- 还原被 PowerShell 损坏的中文字符串
+- `kernel/display_st7789.c`：冒号字符右移 1 像素
+- `kernel/main.c`：首屏信息改为 DOS 绿色
+- DIR 命令 DOS 格式输出，区分 `<DIR>` 和文件大小
 
 ## 2026-05-14
 

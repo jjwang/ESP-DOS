@@ -189,16 +189,16 @@ static void show_splash(void)
     int col1 = 16;
     int lh = 14;
 
-    display_draw_text(col1, iy, "型号: ESP32-1732S019", 0xC618, COLOR_BLACK);
-    display_draw_text(col1, iy + lh, "芯片: ESP32-S3  双核", 0xC618, COLOR_BLACK);
+    display_draw_text(col1, iy, "型号: ESP32-1732S019", 0x07E0, COLOR_BLACK);
+    display_draw_text(col1, iy + lh, "芯片: ESP32-S3  双核", 0x07E0, COLOR_BLACK);
     char buf[48];
     snprintf(buf, sizeof(buf), "内存: PSRAM %dMB  Flash %dMB",
              (int)(psram / 1024 / 1024), (int)(flash_sz / 1024 / 1024));
-    display_draw_text(col1, iy + lh * 2, buf, 0xC618, COLOR_BLACK);
+    display_draw_text(col1, iy + lh * 2, buf, 0x07E0, COLOR_BLACK);
     snprintf(buf, sizeof(buf), "显示: ST7789  %dx%d", TFT_WIDTH, TFT_HEIGHT);
-    display_draw_text(col1, iy + lh * 3, buf, 0xC618, COLOR_BLACK);
+    display_draw_text(col1, iy + lh * 3, buf, 0x07E0, COLOR_BLACK);
     snprintf(buf, sizeof(buf), "版本: v0.1.0  %s %s", __DATE__, __TIME__);
-    display_draw_text(col1, iy + lh * 4, buf, 0xC618, COLOR_BLACK);
+    display_draw_text(col1, iy + lh * 4, buf, 0x07E0, COLOR_BLACK);
 
     display_flush_all();
 }
@@ -234,7 +234,7 @@ void app_main(void)
 
     display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);
     snprintf(buf, sizeof(buf), "编译: %s %s", __DATE__, __TIME__);
-    display_draw_text(16, iy, buf, 0xC618, COLOR_BLACK);
+    display_draw_text(16, iy, buf, 0x07E0, COLOR_BLACK);
 
     iy += 16;
     display_fill_rect(0, iy, TFT_WIDTH, 14, COLOR_BLACK);

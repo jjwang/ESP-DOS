@@ -481,18 +481,26 @@ int vfs_getcwd(char *buf, int size)
 int vfs_chdir(const char *path)
 {
     if (!g_mounted) return -1;
-    char real[256];
-    real_path(path, real, sizeof(real));
 
-    struct stat st;
-    if (stat(real, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        return -1;
+    /* 注册表中查找目录 */
+    char norm[256];
+    if (path[0] == '/') {
+        strncpy(norm, path, sizeof(norm) - 1);
+    } else {
+        int clen = strlen(g_cwd);
+        if (g_cwd[clen - 1] == '/')
+            snprintf(norm, sizeof(norm), "%s%s", g_cwd, path);
+        else
+            snprintf(norm, sizeof(norm), "%s/%s", g_cwd, path);
     }
+    /* 去掉尾部 / */
+    int nlen = strlen(norm);
+    while (nlen > 1 && norm[nlen - 1] == '/') norm[--nlen] = '\0';
 
-    char resolved[256];
-    real_path(path, resolved, sizeof(resolved));
-    strip_prefix(resolved, g_cwd, sizeof(g_cwd));
+    if (reg_find(norm) < 0 || s_registry[reg_find(norm)].type != VFS_DIR)
+        return -1;
 
+    strncpy(g_cwd, norm, sizeof(g_cwd) - 1);
     return 0;
 }
 

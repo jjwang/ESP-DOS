@@ -243,7 +243,7 @@ static void cmd_cd(shell_t *sh, int argc, char **argv)
     }
     const char *path = argv[1];
     if (vfs_chdir(path) != 0) {
-        shell_puts(sh, "目录不存�? ");
+        shell_puts(sh, "目录不存在");
         shell_puts(sh, path);
         shell_puts(sh, "\n");
         return;
@@ -781,8 +781,19 @@ static void shell_set_output_color(shell_t *sh)
 void shell_print_prompt(shell_t *sh)
 {
     shell_set_input_color(sh);
-    shell_puts(sh, SHELL_PROMPT);
-    sh->prompt_len = strlen(SHELL_PROMPT);
+    char prompt[128];
+    snprintf(prompt, sizeof(prompt), "A:");
+    /* 将当前目录转为DOS风格并追加 */
+    char dos[64];
+    strncpy(dos, sh->cwd, sizeof(dos) - 1);
+    for (int i = 0; dos[i]; i++)
+        if (dos[i] == '/') dos[i] = '\\';
+    if (strcmp(sh->cwd, "/") == 0)
+        strcat(prompt, "\\>");
+    else
+        snprintf(prompt + 2, sizeof(prompt) - 2, "%s\\>", dos);
+    shell_puts(sh, prompt);
+    sh->prompt_len = strlen(prompt);
     sh->prompt_len *= 6;
 }
 
@@ -791,8 +802,18 @@ static void shell_redraw_input(shell_t *sh)
     term_clear_line(sh->term);
 
     shell_set_input_color(sh);
-    shell_puts(sh, SHELL_PROMPT);
-    sh->prompt_len = strlen(SHELL_PROMPT) * 6;
+    char prompt[128];
+    snprintf(prompt, sizeof(prompt), "A:");
+    char dos[64];
+    strncpy(dos, sh->cwd, sizeof(dos) - 1);
+    for (int i = 0; dos[i]; i++)
+        if (dos[i] == '/') dos[i] = '\\';
+    if (strcmp(sh->cwd, "/") == 0)
+        strcat(prompt, "\\>");
+    else
+        snprintf(prompt + 2, sizeof(prompt) - 2, "%s\\>", dos);
+    shell_puts(sh, prompt);
+    sh->prompt_len = strlen(prompt) * 6;
 
     for (int i = 0; i < sh->input_len; i++) {
         term_putchar(sh->term, sh->input_buf[i]);
