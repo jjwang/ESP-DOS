@@ -8,6 +8,7 @@
 #define VFS_FILE    1
 #define VFS_DIR     2
 #define VFS_MOUNT   3
+#define VFS_EXEC    4
 
 /* 文件打开模式 */
 #define VFS_O_RDONLY   0
@@ -30,6 +31,7 @@ typedef struct {
     char name[64];
     uint16_t type;
     uint32_t size;
+    uint32_t mtime;
 } vfs_dirent_t;
 
 /* 目录流 */

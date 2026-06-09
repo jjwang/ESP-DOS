@@ -186,10 +186,18 @@ static void cmd_ls(shell_t *sh, int argc, char **argv)
     int total_files = 0;
     vfs_dirent_t *entry;
     while ((entry = vfs_readdir(dir)) != NULL) {
+        char date[32] = "";
+        if (entry->mtime) {
+            time_t t = (time_t)entry->mtime;
+            struct tm *tm = localtime(&t);
+            strftime(date, sizeof(date), "%Y/%m/%d  %H:%M", tm);
+        }
         if (entry->type == VFS_DIR) {
-            snprintf(buf, sizeof(buf), "        <DIR>  %s\n", entry->name);
+            snprintf(buf, sizeof(buf), "%s    <DIR>  %s\n", date, entry->name);
+        } else if (entry->type == VFS_EXEC) {
+            snprintf(buf, sizeof(buf), "%s    <EXEC> %s\n", date, entry->name);
         } else {
-            snprintf(buf, sizeof(buf), "       %8lu  %s\n", (unsigned long)entry->size, entry->name);
+            snprintf(buf, sizeof(buf), "%s  %8lu  %s\n", date, (unsigned long)entry->size, entry->name);
         }
         shell_puts(sh, buf);
         total_files++;
@@ -740,7 +748,7 @@ void shell_execute(shell_t *sh, const char *cmd_in)
         char elf_path[128];
         snprintf(elf_path, sizeof(elf_path), "/bin/%s", argv[0]);
         vfs_stat_t st;
-        if (vfs_stat(elf_path, &st) == 0 && st.type == VFS_FILE) {
+        if (vfs_stat(elf_path, &st) == 0 && (st.type == VFS_FILE || st.type == VFS_EXEC)) {
             int pid = proc_spawn_elf(elf_path, argc, argv);
             if (pid > 0) {
                 char buf[32];

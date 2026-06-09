@@ -151,7 +151,7 @@ static void install_elf(const char *name, const uint8_t *data, uint32_t size)
     }
     char vpath[64];
     snprintf(vpath, sizeof(vpath), "/bin/%s", name);
-    reg_add(vpath, VFS_FILE);
+    reg_add(vpath, VFS_EXEC);
 }
 
 /* ---- 公共API ---- */
@@ -342,7 +342,20 @@ int vfs_stat(const char *path, vfs_stat_t *statbuf)
     if (stat(real, &st) != 0) return -1;
 
     memset(statbuf, 0, sizeof(vfs_stat_t));
-    statbuf->type = S_ISDIR(st.st_mode) ? VFS_DIR : VFS_FILE;
+    if (S_ISDIR(st.st_mode)) {
+        statbuf->type = VFS_DIR;
+    } else {
+        statbuf->type = VFS_FILE;
+        /* 检测 ELF 魔数标记可执行文件 */
+        FILE *fp = fopen(real, "rb");
+        if (fp) {
+            unsigned char magic[4];
+            if (fread(magic, 1, 4, fp) == 4 && magic[0] == 0x7F && magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F') {
+                statbuf->type = VFS_EXEC;
+            }
+            fclose(fp);
+        }
+    }
     statbuf->size = (uint32_t)st.st_size;
     statbuf->mtime = (uint32_t)st.st_mtime;
 
@@ -405,13 +418,16 @@ vfs_dir_t *vfs_opendir(const char *path)
         s_dir.entries[idx].name[sizeof(s_dir.entries[idx].name) - 1] = '\0';
         s_dir.entries[idx].type = s_registry[i].type;
         s_dir.entries[idx].size = 0;
-        /* 获取文件实际大小 */
-        if (s_registry[i].type == VFS_FILE) {
+        s_dir.entries[idx].mtime = 0;
+        /* 获取文件实际大小和时间 */
+        if (s_registry[i].type == VFS_FILE || s_registry[i].type == VFS_EXEC || s_registry[i].type == VFS_DIR) {
             char fpath[128];
             real_path(full, fpath, sizeof(fpath));
             struct stat st;
-            if (stat(fpath, &st) == 0)
+            if (stat(fpath, &st) == 0) {
                 s_dir.entries[idx].size = (uint32_t)st.st_size;
+                s_dir.entries[idx].mtime = (uint32_t)st.st_mtime;
+            }
         }
         s_dir.entry_count++;
     }

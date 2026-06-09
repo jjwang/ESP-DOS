@@ -85,6 +85,7 @@
 /* ---- TCA8418 键盘 I2C 引脚 (I2C_NUM_1) ---- */
 #define CONFIG_I2C_SDA_PIN  4
 #define CONFIG_I2C_SCL_PIN  5
+#define KBD_INT_PIN         6       /* TCA8418 INT (开漏, 有10k上拉) */
 
 /* ---- DS3231 RTC I2C 引脚 (I2C_NUM_0) ---- */
 #define DS3231_I2C_SDA_PIN  15

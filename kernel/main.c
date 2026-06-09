@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "driver/uart.h"
+#include "driver/i2c.h"
 #include "esp_rom_sys.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
@@ -251,6 +252,8 @@ void app_main(void)
     /* 初始化 I2C 总线 (共享于 TCA8418 + DS3231) */
     ESP_LOGI(TAG, "初始化 I2C 总线...");
     i2c_bus_init();
+
+    /* I2C 总线就绪, TCA8418 由 kbd_task 异步探测 */
 
     /* 初始化 DS3231 RTC */
     ESP_LOGI(TAG, "初始化 DS3231 RTC...");
