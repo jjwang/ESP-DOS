@@ -79,6 +79,12 @@
 #define TCA8418_MAX_COLS    10
 #define TCA8418_KEYS        (TCA8418_MAX_ROWS * TCA8418_MAX_COLS)
 
+/* 特殊键值 */
+#define KEY_UP      0xF001
+#define KEY_DOWN    0xF002
+#define KEY_LEFT    0xF003
+#define KEY_RIGHT   0xF004
+
 int tca8418_init(void);
 int tca8418_read_key(uint16_t *ch);
 

@@ -22,6 +22,7 @@
 #include "process.h"
 #include "vfs.h"
 #include "ds3231.h"
+#include "tca8418.h"
 
 /* 分页输出 */
 extern QueueHandle_t g_input_queue;
@@ -553,18 +554,29 @@ static void cmd_date(shell_t *sh, int argc, char **argv)
              dow[t->tm_wday], t->tm_mon + 1, t->tm_mday, t->tm_year + 1900);
     shell_puts(sh, buf);
     shell_puts(sh, "Enter new date (YYYY-MM-DD): ");
-    /* 非阻塞读取一行输入 */
+    term_render(sh->term);
     uint16_t input[32];
     int pos = 0;
     while (1) {
         uint16_t ch;
         if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(5000)) == pdTRUE) {
             if (ch == '\r' || ch == '\n') break;
-            if (ch == '\b' && pos > 0) { pos--; continue; }
-            if (pos < 30) input[pos++] = ch;
+            if ((ch == '\b' || ch == 0x7F) && pos > 0) {
+                pos--;
+                term_cursor_left(sh->term);
+                term_putchar(sh->term, ' ');
+                term_cursor_left(sh->term);
+                term_render(sh->term);
+                continue;
+            }
+            if (pos < 30) {
+                input[pos++] = ch;
+                term_putchar(sh->term, ch);
+                term_render(sh->term);
+            }
         } else {
             shell_puts(sh, "\n");
-            return;
+            break;
         }
     }
     input[pos] = 0;
@@ -619,17 +631,29 @@ static void cmd_time_cmd(shell_t *sh, int argc, char **argv)
              t->tm_hour, t->tm_min, t->tm_sec);
     shell_puts(sh, buf);
     shell_puts(sh, "Enter new time (HH:MM:SS): ");
+    term_render(sh->term);
     uint16_t input[32];
     int pos = 0;
     while (1) {
         uint16_t ch;
         if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(5000)) == pdTRUE) {
             if (ch == '\r' || ch == '\n') break;
-            if (ch == '\b' && pos > 0) { pos--; continue; }
-            if (pos < 30) input[pos++] = ch;
+            if ((ch == '\b' || ch == 0x7F) && pos > 0) {
+                pos--;
+                term_cursor_left(sh->term);
+                term_putchar(sh->term, ' ');
+                term_cursor_left(sh->term);
+                term_render(sh->term);
+                continue;
+            }
+            if (pos < 30) {
+                input[pos++] = ch;
+                term_putchar(sh->term, ch);
+                term_render(sh->term);
+            }
         } else {
             shell_puts(sh, "\n");
-            return;
+            break;
         }
     }
     input[pos] = 0;
@@ -760,7 +784,7 @@ void shell_execute(shell_t *sh, const char *cmd_in)
                 shell_puts(sh, "加载失败\n");
             }
         } else {
-            shell_puts(sh, "命令未找�? ");
+            shell_puts(sh, "命令未找到 ");
             shell_puts(sh, argv[0]);
             shell_puts(sh, "\n");
         }
@@ -889,6 +913,34 @@ void shell_process_char(shell_t *sh, uint16_t ch)
     /* 处理特殊�?(通过转义序列) */
     if (ch == 0x1B) {
         /* ESC序列 - 暂不处理箭头键等 */
+        return;
+    }
+
+    /* 箭头键 */
+    if (ch == KEY_UP || ch == KEY_DOWN) {
+        if (sh->history_count == 0) return;
+        if (ch == KEY_UP) {
+            sh->history_pos--;
+            if (sh->history_pos < 0) sh->history_pos = sh->history_count - 1;
+        } else {
+            sh->history_pos++;
+            if (sh->history_pos >= sh->history_count) sh->history_pos = 0;
+        }
+        int idx = sh->history_pos % SHELL_HISTORY;
+        sh->input_len = 0;
+        for (char *p = sh->history[idx]; *p && sh->input_len < MAX_CMD_LEN - 1; p++)
+            sh->input_buf[sh->input_len++] = (uint8_t)*p;
+        sh->input_cursor = sh->input_len;
+        shell_redraw_input(sh);
+        term_render(sh->term);
+        return;
+    }
+
+    if (ch == KEY_LEFT || ch == KEY_RIGHT) {
+        if (ch == KEY_LEFT && sh->input_cursor > 0)
+            sh->input_cursor--;
+        else if (ch == KEY_RIGHT && sh->input_cursor < sh->input_len)
+            sh->input_cursor++;
         return;
     }
 

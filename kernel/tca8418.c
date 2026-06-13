@@ -26,20 +26,31 @@ static uint8_t s_addr = 0;
  *   ROW5: K015-K021 → 物理 R2 左半
  *   ROW6: K008-K014 → 物理 R1 右半
  *   ROW7: K001-K007 → 物理 R1 左半
+ *
+ *   物理布局:
+ *   ┌───┬───┬───┬───┬───┬───┬───┐   ┌───┬───┬───┬───┬───┬───┬───┐
+ *   │Esc│ 1 │ 2 │ 3 │ 4 │ 5 │ 6 │   │ 7 │ 8 │ 9 │ 0 │ - │ = │Bsp│
+ *   ├───┼───┼───┼───┼───┼───┼───┤   ├───┼───┼───┼───┼───┼───┼───┤
+ *   │Tab│ q │ w │ e │ r │ t │ y │   │ u │ i │ o │ p │ [ │ ] │ \ │
+ *   ├───┼───┼───┼───┼───┼───┼───┤   ├───┼───┼───┼───┼───┼───┼───┤
+ *   │ ↑ │ ↓ │ a │ s │ d │ f │ g │   │ h │ j │ k │ l │ ; │ ' │ ↵ │
+ *   ├───┼───┼───┼───┼───┼───┼───┤   ├───┼───┼───┼───┼───┼───┼───┤
+ *   │Ctl│ ← │ → │ z │ x │ c │ v │   │ b │ n │ m │ , │ . │ / │Spc│
+ *   └───┴───┴───┴───┴───┴───┴───┘   └───┴───┴───┴───┴───┴───┴───┘
  */
 static const uint16_t s_keymap[TCA8418_KEYS] = {
-    /* ROW0 (K050-K056): B, N, M, ,, ., /, Space */
-    'B', 'N', 'M', ',', '.', '/', ' ', 0,0,0,
-    /* ROW1 (K043-K049): Ctrl, Opt, Alt, Z, X, C, V */
-    0, 0, 0, 'Z', 'X', 'C', 'V', 0,0,0,
-    /* ROW2 (K036-K042): H, J, K, L, ;, ', Enter */
-    'H', 'J', 'K', 'L', ';', '\'', '\r', 0,0,0,
-    /* ROW3 (K029-K035): Fn, Shift, A, S, D, F, G */
-    0, 0, 'A', 'S', 'D', 'F', 'G', 0,0,0,
-    /* ROW4 (K022-K028): U, I, O, P, [, ], \ */
-    'U', 'I', 'O', 'P', '[', ']', '\\', 0,0,0,
-    /* ROW5 (K015-K021): Tab, Q, W, E, R, T, Y */
-    '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 0,0,0,
+    /* ROW0 (K050-K056): b, n, m, ,, ., /, Space */
+    'b', 'n', 'm', ',', '.', '/', ' ', 0,0,0,
+    /* ROW1 (K043-K049): Ctrl, ←, →, z, x, c, v */
+    0, KEY_LEFT, KEY_RIGHT, 'z', 'x', 'c', 'v', 0,0,0,
+    /* ROW2 (K036-K042): h, j, k, l, ;, ', Enter */
+    'h', 'j', 'k', 'l', ';', '\'', '\r', 0,0,0,
+    /* ROW3 (K029-K035): ↑, ↓, a, s, d, f, g */
+    KEY_UP, KEY_DOWN, 'a', 's', 'd', 'f', 'g', 0,0,0,
+    /* ROW4 (K022-K028): u, i, o, p, [, ], \ */
+    'u', 'i', 'o', 'p', '[', ']', '\\', 0,0,0,
+    /* ROW5 (K015-K021): Tab, q, w, e, r, t, y */
+    '\t', 'q', 'w', 'e', 'r', 't', 'y', 0,0,0,
     /* ROW6 (K008-K014): 7, 8, 9, 0, -, =, Bksp */
     '7', '8', '9', '0', '-', '=', 0x7F, 0,0,0,
     /* ROW7 (K001-K007): Esc, 1, 2, 3, 4, 5, 6 */
@@ -145,15 +156,8 @@ int tca8418_init(void)
 
 int tca8418_read_key(uint16_t *ch)
 {
-    uint8_t int_stat;
-    if (reg_read(REG_INT_STAT, &int_stat) != ESP_OK)
-        return 0;
-
-    if (!(int_stat & INT_STAT_K_INT))
-        return 0;
-
-    /* 循环读取 FIFO 中所有挂起事件 */
     int processed = 0;
+
     while (1) {
         uint8_t event;
         if (reg_read(REG_KEY_EVENT_A, &event) != ESP_OK)
@@ -178,6 +182,26 @@ int tca8418_read_key(uint16_t *ch)
     }
 
     reg_write(REG_INT_STAT, 0xFF);
+
+    /* 再读一次: 处理清除 INT_STAT 期间到达的事件 */
+    uint8_t late;
+    if (reg_read(REG_KEY_EVENT_A, &late) == ESP_OK && late != 0) {
+        do {
+            int pressed = (late & KEY_EVENT_VALUE) != 0;
+            int code = late & KEY_EVENT_CODE;
+            if (pressed && processed == 0) {
+                int idx = code - 1;
+                if (idx >= 0 && idx < TCA8418_KEYS) {
+                    uint16_t c = s_keymap[idx];
+                    if (c != 0) {
+                        *ch = c;
+                        processed = 1;
+                    }
+                }
+            }
+        } while (reg_read(REG_KEY_EVENT_A, &late) == ESP_OK && late != 0);
+        reg_write(REG_INT_STAT, 0xFF);
+    }
 
     return processed;
 }
