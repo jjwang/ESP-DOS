@@ -59,6 +59,7 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv);
 static void cmd_sysinfo(shell_t *sh, int argc, char **argv);
 static void cmd_date(shell_t *sh, int argc, char **argv);
 static void cmd_time_cmd(shell_t *sh, int argc, char **argv);
+static void shell_set_input_color(shell_t *sh);
 
 static const cmd_entry_t cmd_table[] = {
     {"help",   "显示帮助信息",        "HELP [命令]", cmd_help},
@@ -553,30 +554,33 @@ static void cmd_date(shell_t *sh, int argc, char **argv)
     snprintf(buf, sizeof(buf), "Current date is: %s %02d-%02d-%04d\n",
              dow[t->tm_wday], t->tm_mon + 1, t->tm_mday, t->tm_year + 1900);
     shell_puts(sh, buf);
+    shell_set_input_color(sh);
     shell_puts(sh, "Enter new date (YYYY-MM-DD): ");
     term_render(sh->term);
     uint16_t input[32];
     int pos = 0;
     while (1) {
         uint16_t ch;
-        if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(5000)) == pdTRUE) {
+        if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(250)) == pdTRUE) {
             if (ch == '\r' || ch == '\n') break;
             if ((ch == '\b' || ch == 0x7F) && pos > 0) {
                 pos--;
                 term_cursor_left(sh->term);
                 term_putchar(sh->term, ' ');
                 term_cursor_left(sh->term);
+                shell_set_input_color(sh);
                 term_render(sh->term);
                 continue;
             }
             if (pos < 30) {
                 input[pos++] = ch;
                 term_putchar(sh->term, ch);
+                shell_set_input_color(sh);
                 term_render(sh->term);
             }
         } else {
-            shell_puts(sh, "\n");
-            break;
+            sh->term->dirty = 1;
+            term_render(sh->term);
         }
     }
     input[pos] = 0;
@@ -630,30 +634,33 @@ static void cmd_time_cmd(shell_t *sh, int argc, char **argv)
     snprintf(buf, sizeof(buf), "Current time is: %02d:%02d:%02d\n",
              t->tm_hour, t->tm_min, t->tm_sec);
     shell_puts(sh, buf);
+    shell_set_input_color(sh);
     shell_puts(sh, "Enter new time (HH:MM:SS): ");
     term_render(sh->term);
     uint16_t input[32];
     int pos = 0;
     while (1) {
         uint16_t ch;
-        if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(5000)) == pdTRUE) {
+        if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(250)) == pdTRUE) {
             if (ch == '\r' || ch == '\n') break;
             if ((ch == '\b' || ch == 0x7F) && pos > 0) {
                 pos--;
                 term_cursor_left(sh->term);
                 term_putchar(sh->term, ' ');
                 term_cursor_left(sh->term);
+                shell_set_input_color(sh);
                 term_render(sh->term);
                 continue;
             }
             if (pos < 30) {
                 input[pos++] = ch;
                 term_putchar(sh->term, ch);
+                shell_set_input_color(sh);
                 term_render(sh->term);
             }
         } else {
-            shell_puts(sh, "\n");
-            break;
+            sh->term->dirty = 1;
+            term_render(sh->term);
         }
     }
     input[pos] = 0;
@@ -724,7 +731,6 @@ static void free_argv(char **argv, int argc)
 }
 
 /* 颜色辅助函数 (定义在后�? */
-static void shell_set_input_color(shell_t *sh);
 static void shell_set_output_color(shell_t *sh);
 
 void shell_execute(shell_t *sh, const char *cmd_in)
@@ -793,7 +799,7 @@ void shell_execute(shell_t *sh, const char *cmd_in)
     free_argv(argv, argc);
 }
 
-/* 设置提示�?输入颜色 (浅蓝) */
+/* 设置提示�?输入颜色 */
 static void shell_set_input_color(shell_t *sh)
 {
     sh->term->fg_color = 8;

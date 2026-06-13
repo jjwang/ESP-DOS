@@ -133,12 +133,10 @@ static void shell_task(void *arg)
     shell_print_prompt(&g_shell);
     term_render(&g_terminal);
 
-    /* 主循环 - 带输入超时自动执行 */
+    /* 主循环 */
     uint16_t ch;
-    int idle_count = 0;
     while (g_shell.running) {
         if (xQueueReceive(g_input_queue, &ch, pdMS_TO_TICKS(50)) == pdTRUE) {
-            idle_count = 0;
             if (ch < 0x80) {
                 uint8_t ascii = (uint8_t)ch;
                 uart_write_bytes(UART_NUM_0, &ascii, 1);
@@ -151,19 +149,9 @@ static void shell_task(void *arg)
                 uart_write_bytes(UART_NUM_0, &lf, 1);
             }
         } else {
-            idle_count++;
-            /* 每100ms刷新显示 (用于光标闪烁) */
-            if (idle_count % 2 == 0) {
-                g_terminal.dirty = 1;
-                term_render(&g_terminal);
-            }
-            if (idle_count > 4 && g_shell.input_len > 0) {
-                idle_count = 0;
-                uint16_t cr = '\r';
-                shell_process_char(&g_shell, cr);
-                uint8_t lf = '\n';
-                uart_write_bytes(UART_NUM_0, &lf, 1);
-            }
+            /* 空闲: 刷新显示 (光标闪烁) */
+            g_terminal.dirty = 1;
+            term_render(&g_terminal);
         }
     }
 }
