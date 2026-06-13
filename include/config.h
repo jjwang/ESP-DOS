@@ -2,7 +2,7 @@
 #define __CONFIG_H__
 
 /* ==========================================================
- * OpenCrab - 配置文件
+ * Jaycomp-DOS - 配置文件
  * 根据你的硬件连接修改以下引脚定义
  * ========================================================== */
 
@@ -99,7 +99,7 @@
 #define MAX_ARGS        16
 
 /* ---- 文件名常量 ---- */
-#define VERSION_STR     "OpenCrab-DOS Version 1.0"
+#define VERSION_STR     "Jaycomp-DOS Version 1.0"
 #define BUILD_DATE      __DATE__ " " __TIME__
 
 #endif /* __CONFIG_H__ */

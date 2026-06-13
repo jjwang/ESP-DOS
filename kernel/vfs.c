@@ -205,8 +205,8 @@ int vfs_init(void)
     /* 创建欢迎文件 */
     FILE *f = fopen(SPIFFS_ROOT "/home/welcome.txt", "w");
     if (f) {
-        fprintf(f, "OpenCrab-DOS Version 1.0\n");
-        fprintf(f, "(C) Copyright OpenCrab 2026\n");
+        fprintf(f, "Jaycomp-DOS Version 1.0\n");
+        fprintf(f, "(C) Copyright Jaycomp 2026\n");
         fclose(f);
         reg_add("/home/welcome.txt", VFS_FILE);
     }

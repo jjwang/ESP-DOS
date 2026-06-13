@@ -119,7 +119,7 @@ static void cmd_kill(shell_t *sh, int argc, char **argv)
 
 static void cmd_help(shell_t *sh, int argc, char **argv)
 {
-    shell_puts(sh, "\nOpenCrab-DOS - 可用命令:\n");
+    shell_puts(sh, "\nJaycomp-DOS - 可用命令:\n");
     shell_puts(sh, "================================\n");
 
     if (argc > 1) {

@@ -123,7 +123,7 @@ static void shell_task(void *arg)
     g_terminal.fg_color = 8;
     g_terminal.fg_custom = COLOR_DOS_GREEN;
     term_puts(&g_terminal, "ESP-DOS Version 1.0\n");
-    term_puts(&g_terminal, "(C) Copyright OpenCrab 2026\n");
+    term_puts(&g_terminal, "(C) Copyright Jaycomp 2026\n");
     term_render(&g_terminal);
 
     /* Shell初始化 */
