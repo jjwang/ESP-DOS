@@ -15,9 +15,12 @@ int ets_printf(const char *fmt, ...);
 #include "elf.h"
 #include "vfs.h"
 #include "terminal.h"
+#include "config.h"
 extern terminal_t g_terminal;
 
 static const char *TAG = "PROC";
+
+extern QueueHandle_t g_input_queue;
 
 static pcb_t g_proc_table[MAX_PROC];
 static uint16_t g_next_pid = 1;
@@ -63,15 +66,24 @@ int proc_spawn(const char *name, proc_entry_t entry, void *arg, int prio, int st
 }
 
 /* ELF输出 — 同时输出到UART和显示终端 */
+static void elf_set_color(void)
+{
+    g_terminal.fg_color = 8;
+    g_terminal.fg_custom = COLOR_DOS_GREEN;
+    g_terminal.line_fg_color[g_terminal.current_line] = COLOR_DOS_GREEN;
+}
+
 static void elf_print(const char *s)
 {
     if (s) {
+        elf_set_color();
         ets_printf("%s", s);
         term_puts(&g_terminal, s);
     }
 }
 static void elf_println(const char *s)
 {
+    elf_set_color();
     if (s) {
         ets_printf("%s\n", s);
         term_puts(&g_terminal, s);
@@ -81,9 +93,26 @@ static void elf_println(const char *s)
 static void elf_putchar(char c)
 {
     char buf[2] = {c, 0};
+    elf_set_color();
     ets_printf("%s", buf);
     term_putchar(&g_terminal, c);
+    g_terminal.dirty = 1;
+    term_render(&g_terminal);
 }
+
+/* 输入函数 */
+static int elf_getchar(void)
+{
+    g_terminal.dirty = 1;
+    term_render(&g_terminal);
+    uint16_t ch;
+    if (xQueueReceive(g_input_queue, &ch, portMAX_DELAY) == pdTRUE) {
+        if (ch == '\r') ch = '\n';
+        return (int)ch;
+    }
+    return -1;
+}
+
 static void elf_printf(const char *fmt, ...)
 {
     char buf[256];
@@ -92,12 +121,29 @@ static void elf_printf(const char *fmt, ...)
     int n = vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
     if (n > 0) {
+        elf_set_color();
         ets_printf("%s", buf);
         term_puts(&g_terminal, buf);
     }
 }
 
-/* VFS 桥接函数 */
+static void elf_gets(char *buf, int max)
+{
+    int i = 0;
+    while (i < max - 1) {
+        int c = elf_getchar();
+        if (c < 0) break;
+        if (c == '\n' || c == '\r') break;
+        if (c == '\b' || c == 0x7F) {
+            if (i > 0) { i--; elf_putchar('\b'); }
+            continue;
+        }
+        buf[i++] = (char)c;
+        elf_putchar((char)c);
+    }
+    buf[i] = '\0';
+    elf_putchar('\n');
+}
 static void *elf_fopen(const char *path, const char *mode)
 {
     int flags = 0;
@@ -227,8 +273,8 @@ int proc_spawn_elf(const char *path, int argc, char **argv)
     w->sys.println = elf_println;
     w->sys.print_char = elf_putchar;
     w->sys.printf = elf_printf;
-    w->sys.getchar = NULL;
-    w->sys.gets = NULL;
+    w->sys.getchar = elf_getchar;
+    w->sys.gets = elf_gets;
     w->sys.fopen = elf_fopen;
     w->sys.fread = elf_fread;
     w->sys.fwrite = elf_fwrite;
@@ -252,7 +298,7 @@ int proc_spawn_elf(const char *path, int argc, char **argv)
     char task_name[PROC_NAME_LEN];
     snprintf(task_name, sizeof(task_name), "elf_%d", pid);
 
-    if (xTaskCreatePinnedToCore(elf_entry_wrapper, task_name, 4096, w, 5,
+    if (xTaskCreatePinnedToCore(elf_entry_wrapper, task_name, 8192, w, 5,
                                  &g_proc_table[slot].task, 0) != pdPASS) {
         g_proc_table[slot].state = PROC_FREE;
         free(w->argv); free(w); elf_free(&elf);

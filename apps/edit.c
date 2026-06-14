@@ -44,12 +44,14 @@ static int load_file(syscall_t *sys, const char *path)
     while (line_count < MAX_LINES) {
         int len = 0;
         char c;
-        while (sys->fread(&c, 1, fp) == 1 && len < LINE_LEN - 1) {
+        int has_data = 0;
+        while (sys->fread(&c, 1, fp) == 1) {
+            has_data = 1;
             if (c == '\n') break;
-            if (c != '\r') buf[len++] = c;
+            if (c != '\r' && len < LINE_LEN - 1) buf[len++] = c;
         }
+        if (!has_data && len == 0) break;
         buf[len] = '\0';
-        if (len == 0 && c != '\n') break;
         char *p = sys->malloc(len + 1);
         if (!p) break;
         s_cpy(p, buf);

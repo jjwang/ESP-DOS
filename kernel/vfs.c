@@ -290,6 +290,17 @@ vfs_file_t *vfs_open(const char *path, int flags)
         FILE *f = fopen(real, mode);
         if (f) {
             fclose(f);
+            char norm[256];
+            if (path[0] == '/') {
+                strncpy(norm, path, sizeof(norm) - 1);
+            } else if (path[0] == '.' && path[1] == '\0') {
+                snprintf(norm, sizeof(norm), "%s", g_cwd);
+            } else {
+                snprintf(norm, sizeof(norm), "%s/%s", g_cwd, path);
+            }
+            int nlen = strlen(norm);
+            while (nlen > 1 && norm[nlen - 1] == '/') norm[--nlen] = '\0';
+            reg_add(norm, VFS_FILE);
         } else {
             free(file);
             return NULL;
