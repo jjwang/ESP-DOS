@@ -147,20 +147,28 @@ static void cmd_help(shell_t *sh, int argc, char **argv)
         return;
     }
 
+    int lines = 2;
     for (int i = 0; cmd_table[i].name; i++) {
-        shell_puts(sh, "  ");
+        char line[64];
         char up[16];
         strcpy(up, cmd_table[i].name);
         for (int j = 0; up[j]; j++) up[j] = toupper((unsigned char)up[j]);
-        shell_puts(sh, up);
         int pad = 10 - strlen(cmd_table[i].name);
         if (pad < 1) pad = 1;
-        char buf[16];
-        memset(buf, ' ', pad);
-        buf[pad] = '\0';
-        shell_puts(sh, buf);
-        shell_puts(sh, cmd_table[i].desc);
-        shell_puts(sh, "\n");
+        snprintf(line, sizeof(line), "  %s%*s%s\n", up, pad, "", cmd_table[i].desc);
+        shell_puts(sh, line);
+        lines++;
+
+        if (lines >= TERM_ROWS - 1 && cmd_table[i + 1].name) {
+            shell_set_input_color(sh);
+            shell_puts(sh, "--- 按任意键继续 ---");
+            term_render(sh->term);
+            uint16_t ch;
+            xQueueReceive(g_input_queue, &ch, portMAX_DELAY);
+            term_clear_line(sh->term);
+            term_render(sh->term);
+            lines = 0;
+        }
     }
 }
 
