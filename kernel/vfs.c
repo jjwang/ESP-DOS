@@ -26,6 +26,9 @@
 #ifdef ELF_DF_DATA
 #include "fonts/elf_df.h"
 #endif
+#ifdef ELF_EDIT_DATA
+#include "fonts/elf_edit.h"
+#endif
 
 static const char *TAG = "VFS";
 static char g_cwd[128] = "/";
@@ -230,6 +233,9 @@ int vfs_init(void)
 #endif
 #ifdef ELF_DF_DATA
     install_elf("chkdsk", elf_df_data, ELF_DF_SIZE);
+#endif
+#ifdef ELF_EDIT_DATA
+    install_elf("edit", elf_edit_data, ELF_EDIT_SIZE);
 #endif
 
     ESP_LOGI(TAG, "SPIFFS ready");

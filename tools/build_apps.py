@@ -83,7 +83,7 @@ def main():
     print(f"工具链: {CC}")
     print()
     
-    apps = ['echo', 'hello', 'date', 'free', 'uname', 'df']
+    apps = ['echo', 'hello', 'date', 'free', 'uname', 'df', 'edit']
     for app in apps:
         build_app(app)
     
