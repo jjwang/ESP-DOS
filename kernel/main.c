@@ -37,8 +37,10 @@ static volatile int s_print_lock = 0;
 
 static int log_vprintf(const char *fmt, va_list args)
 {
+    char buf[256];
+    int n = vsnprintf(buf, sizeof(buf), fmt, args);
     while (__sync_lock_test_and_set(&s_print_lock, 1)) {}
-    int n = esp_rom_vprintf(fmt, args);
+    esp_rom_printf("%s", buf);
     __sync_lock_release(&s_print_lock);
     return n;
 }

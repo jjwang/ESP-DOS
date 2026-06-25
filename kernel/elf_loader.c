@@ -3,9 +3,10 @@
 #include <string.h>
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_mmu_map.h"
-#include "hal/cache_hal.h"
+#include "hal/mmu_ll.h"
 #include "hal/mmu_types.h"
+#include "esp32s3/rom/cache.h"
+#include "soc/ext_mem_defs.h"
 #include "elf.h"
 #include "vfs.h"
 
@@ -84,7 +85,7 @@ int elf_load(const char *path, elf_load_result_t *out)
     /* 分配PSRAM (SPIRAM) */
     void *base = heap_caps_malloc(total_size, MALLOC_CAP_SPIRAM);
     if (!base) {
-        ESP_LOGE(TAG, "内存不足, 需要 %d bytes", total_size);
+        ESP_LOGE(TAG, "内存不足, 需要 %lu bytes", (unsigned long)total_size);
         free(phdr); vfs_close(f); return -1;
     }
     memset(base, 0, total_size);
@@ -118,42 +119,62 @@ int elf_load(const char *path, elf_load_result_t *out)
             }
             p++;
         }
-        ESP_LOGI(TAG, "重定位: delta=0x%x", delta);
+        ESP_LOGI(TAG, "重定位: delta=0x%x", (unsigned)delta);
     }
 
     /* 写回DCache, 确保数据到达PSRAM */
-    cache_hal_writeback_addr((uint32_t)base, ROUND_UP(total_size, CACHE_LINE));
+    Cache_WriteBack_Addr((uint32_t)base, total_size);
 
-    /* 将PSRAM物理页映射到ICache (覆盖整个ELF) */
+    /* 将PSRAM物理页映射到ICache (使用低层级MMU LL API, 兼容IDF 5.x) */
     void *exec_addr = base;
-    esp_paddr_t phys_addr;
-    mmu_target_t mmu_target;
-    if (esp_mmu_vaddr_to_paddr(base, &phys_addr, &mmu_target) == ESP_OK) {
+    do {
+        uintptr_t vaddr = (uintptr_t)base;
+        /* 确保地址在外部内存范围内 */
+        if ((vaddr & SOC_MMU_LINEAR_ADDR_MASK) != vaddr) break;
+
         uint32_t page_size = 0x10000;
-        uint32_t offset_in_page = (uint32_t)base & (page_size - 1);
-        esp_paddr_t page_start = phys_addr & ~(page_size - 1);
+        uint32_t offset_in_page = vaddr & (page_size - 1);
         size_t map_size = ROUND_UP(offset_in_page + total_size, page_size);
-        void *mapped = NULL;
-        esp_err_t ret = esp_mmu_map(page_start, map_size,
-                                    MMU_TARGET_PSRAM0,
-                                    MMU_MEM_CAP_EXEC | MMU_MEM_CAP_READ,
-                                    0, &mapped);
-        if (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE) {
-            exec_addr = (uint8_t *)mapped + offset_in_page;
-            cache_hal_invalidate_addr((uint32_t)exec_addr, ROUND_UP(total_size, CACHE_LINE));
-            ESP_LOGI(TAG, "映射到ICache: data=%p exec=%p size=%dK", base, exec_addr,
-                     (int)(map_size / 1024));
-        } else {
-            ESP_LOGW(TAG, "MMU映射失败 (%d), 回退", ret);
+        uint32_t pages = map_size / page_size;
+
+        /* 读取数据地址对应的MMU表项, 得到物理页号 */
+        uint32_t data_entry_id = mmu_ll_get_entry_id(0, vaddr);
+        uint32_t mmu_val = mmu_ll_read_entry(0, data_entry_id);
+        if (mmu_val & MMU_INVALID) break;
+
+        /* 找一段空闲的指令虚地址 */
+        uint32_t ibus_vaddr = SOC_MMU_IBUS_VADDR_BASE;
+        uint32_t ibus_entry = mmu_ll_get_entry_id(0, ibus_vaddr);
+        int found = 0;
+        for (int i = 0; i < 512 - pages; i++) {
+            int ok = 1;
+            for (uint32_t p = 0; p < pages; p++) {
+                if (!mmu_ll_get_entry_is_invalid(0, ibus_entry + i + p)) { ok = 0; break; }
+            }
+            if (ok) { found = i; break; }
         }
-    }
+        if (!found) { ESP_LOGW(TAG, "无空闲ICache MMU槽"); break; }
+
+        /* 逐页设置MMU表项 */
+        uint32_t paddr_base = (mmu_val & (~0xFFFF)) << 16;
+        for (uint32_t p = 0; p < pages; p++) {
+            uint32_t phys = paddr_base + p * page_size;
+            uint32_t formatted = mmu_ll_format_paddr(0, phys);
+            mmu_ll_write_entry(0, ibus_entry + found + p, formatted, MMU_TARGET_PSRAM0);
+        }
+
+        exec_addr = (void *)(ibus_vaddr + found * page_size + offset_in_page);
+        Cache_Invalidate_Addr((uint32_t)exec_addr, map_size);
+        ESP_LOGI(TAG, "映射到ICache: data=%p exec=%p size=%luK", base, exec_addr,
+                 (unsigned long)(map_size / 1024));
+    } while (0);
 
     out->base_addr = base;
     out->entry_point = (uint8_t *)exec_addr + (ehdr.e_entry - min_vaddr);
     out->size = total_size;
     out->valid = 1;
 
-    ESP_LOGI(TAG, "加载 '%s' 完成: entry=%p size=%d", path, out->entry_point, total_size);
+    ESP_LOGI(TAG, "加载 '%s' 完成: entry=%p size=%lu", path, out->entry_point, (unsigned long)total_size);
     return 0;
 }
 

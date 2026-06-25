@@ -15,6 +15,8 @@ static const char *TAG = "KBD";
 #define TCA8418_ADDR_HI   0x35
 
 static uint8_t s_addr = 0;
+static uint16_t s_last_key = 0;      /* 最后按键的键码 */
+static int s_last_pressed = 0;       /* 最后按键是按下(1)还是抬起(0) */
 
 /* 键映射: 硬件键码 = row * 10 + col + 1
  * PCB 实际布线 (jaycomp.kicad_pcb):
@@ -169,11 +171,13 @@ int tca8418_read_key(uint16_t *ch)
         int pressed = (event & KEY_EVENT_VALUE) != 0;
         int code = event & KEY_EVENT_CODE;
 
-        if (pressed) {
-            int idx = code - 1;
-            if (idx >= 0 && idx < TCA8418_KEYS) {
-                uint16_t c = s_keymap[idx];
-                if (c != 0) {
+        int idx = code - 1;
+        if (idx >= 0 && idx < TCA8418_KEYS) {
+            uint16_t c = s_keymap[idx];
+            if (c != 0) {
+                s_last_key = c;
+                s_last_pressed = pressed;
+                if (pressed) {
                     *ch = c;
                     processed = 1;
                 }
@@ -189,14 +193,16 @@ int tca8418_read_key(uint16_t *ch)
         do {
             int pressed = (late & KEY_EVENT_VALUE) != 0;
             int code = late & KEY_EVENT_CODE;
-            if (pressed && processed == 0) {
-                int idx = code - 1;
-                if (idx >= 0 && idx < TCA8418_KEYS) {
-                    uint16_t c = s_keymap[idx];
-                    if (c != 0) {
-                        *ch = c;
-                        processed = 1;
-                    }
+            int idx = code - 1;
+            if (idx >= 0 && idx < TCA8418_KEYS) {
+                uint16_t c = s_keymap[idx];
+                if (c != 0) {
+                    s_last_key = c;
+                    s_last_pressed = pressed;
+                }
+                if (pressed && c != 0 && processed == 0) {
+                    *ch = c;
+                    processed = 1;
                 }
             }
         } while (reg_read(REG_KEY_EVENT_A, &late) == ESP_OK && late != 0);
@@ -204,4 +210,11 @@ int tca8418_read_key(uint16_t *ch)
     }
 
     return processed;
+}
+
+int tca8418_is_pressed(uint16_t keycode)
+{
+    if (s_last_key == keycode)
+        return s_last_pressed;
+    return 0;
 }

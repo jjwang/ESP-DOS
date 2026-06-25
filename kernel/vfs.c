@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <dirent.h>
 #include <unistd.h>
 #include <errno.h>
 #include "esp_spiffs.h"
@@ -90,7 +89,7 @@ static void real_path(const char *vpath, char *real, int size)
     snprintf(real, size, "%s%s", SPIFFS_ROOT, out);
 }
 
-static void strip_prefix(const char *real, char *vpath, int size)
+static void __attribute__((unused)) strip_prefix(const char *real, char *vpath, int size)
 {
     const char *p = real + strlen(SPIFFS_ROOT);
     if (p[0] == '\0') {
@@ -133,7 +132,7 @@ static void reg_add(const char *name, uint16_t type)
     }
 }
 
-static void reg_remove(const char *name)
+static void __attribute__((unused)) reg_remove(const char *name)
 {
     int i = reg_find(name);
     if (i < 0) return;
@@ -150,7 +149,7 @@ static void install_elf(const char *name, const uint8_t *data, uint32_t size)
     if (f) {
         fwrite(data, 1, size, f);
         fclose(f);
-        ESP_LOGI(TAG, "安装命令: /bin/%s (%d bytes)", name, size);
+        ESP_LOGI(TAG, "安装命令: /bin/%s (%lu bytes)", name, (unsigned long)size);
     }
     char vpath[64];
     snprintf(vpath, sizeof(vpath), "/bin/%s", name);

@@ -1,31 +1,53 @@
-# Build
+# Build outputs
 .pio/
+*.o
+*.a
+*.elf
+*.map
 sdkconfig.esp32-s3-dev
-sdkconfig
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Temp / debug
+_debug/
+_debug_*
+tmp_*
+build_log.txt
 
-# OS
-Thumbs.db
-.DS_Store
+# Serial dumps
+serial_dump*.bin
+boot_dump*.bin
+elf_output.bin
+run_me.cmd
+
+# ELF binaries
+data/bin/*
+
+# Extracted toolchain objects (from libxt_hal.a extraction)
+*_asm*.o
+*_iram.o
+attribute.o
+cache.o
+clock.o
+coherence.o
+debug.o
+debug_hndlr.o
+disass*.o
+interrupts*.o
+int_asm*.o
+memcopy.o
+mem_ecc*.o
+misc*.o
+mmu.o
+mp_asm.o
+set_region_translate.o
+state*.o
+syscache_asm.o
+windowspill_asm.o
+
+# Extracted archive (build artifact)
+kernel/libprecompiled.a
+kernel/libxt_spill.a
+build_archive.py
 
 # Python
 __pycache__/
 *.pyc
-*.egg-info/
-
-# Build artifacts
-data/bin/
-
-# Agent working files
-AGENTS.md
-
-# Serial dumps
-*.bin
-
-# SPIFFS image
-spiffs.bin

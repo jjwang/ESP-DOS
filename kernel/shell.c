@@ -23,6 +23,8 @@
 #include "vfs.h"
 #include "ds3231.h"
 #include "tca8418.h"
+#include "editor.h"
+#include "dino.h"
 
 /* 分页输出 */
 extern QueueHandle_t g_input_queue;
@@ -59,6 +61,8 @@ static void cmd_wifi(shell_t *sh, int argc, char **argv);
 static void cmd_sysinfo(shell_t *sh, int argc, char **argv);
 static void cmd_date(shell_t *sh, int argc, char **argv);
 static void cmd_time_cmd(shell_t *sh, int argc, char **argv);
+static void cmd_edit(shell_t *sh, int argc, char **argv);
+static void cmd_dino(shell_t *sh, int argc, char **argv);
 static void shell_set_input_color(shell_t *sh);
 
 static const cmd_entry_t cmd_table[] = {
@@ -81,6 +85,8 @@ static const cmd_entry_t cmd_table[] = {
     {"sysinfo","显示系统信息",        "SYSINFO", cmd_sysinfo},
     {"date",   "显示/设置日期",       "DATE [YYYY-MM-DD]", cmd_date},
     {"time",   "显示/设置时间",       "TIME [HH:MM:SS]", cmd_time_cmd},
+    {"edit",   "全屏文本编辑器",      "EDIT [文件]", cmd_edit},
+    {"dino",   "小恐龙游戏",         "DINO", cmd_dino},
     {NULL, NULL, NULL, NULL}
 };
 
@@ -692,6 +698,21 @@ static void cmd_time_cmd(shell_t *sh, int argc, char **argv)
     } else if (pos > 0) {
         shell_puts(sh, "Invalid format.\n");
     }
+}
+
+static void cmd_edit(shell_t *sh, int argc, char **argv)
+{
+    const char *file = NULL;
+    if (argc > 1) file = argv[1];
+    editor_run(file);
+    g_terminal.dirty = 1;
+    term_render(&g_terminal);
+}
+
+static void cmd_dino(shell_t *sh, int argc, char **argv)
+{
+    (void)sh; (void)argc; (void)argv;
+    dino_run();
 }
 
 /* ---- 命令解析与执行 ---- */

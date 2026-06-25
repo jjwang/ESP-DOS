@@ -87,5 +87,6 @@
 
 int tca8418_init(void);
 int tca8418_read_key(uint16_t *ch);
+int tca8418_is_pressed(uint16_t keycode); /* 查询按键当前是否按下 */
 
 #endif

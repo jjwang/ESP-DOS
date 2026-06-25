@@ -200,26 +200,34 @@ void display_flush(int x, int y, int w, int h)
     if (w <= 0 || h <= 0) return;
 
     st7789_set_window(x, y, x + w - 1, y + h - 1);
-
     gpio_set_level(TFT_DC_PIN, 1);
 
-    /* 直接发送帧缓冲中的行数据 - ST7789需要大端序 */
-    int buf_size = w * 2;
+    /* Batch rows into groups to reduce SPI transactions */
+    size_t row_bytes = w * 2;
+    int batch_rows = 20;
+    size_t buf_size = row_bytes * batch_rows;
     uint8_t *buf = (uint8_t *)malloc(buf_size);
     if (!buf) return;
 
-    for (int row = 0; row < h; row++) {
-        int fb_offset = (y + row) * TFT_WIDTH + x;
-        for (int col = 0; col < w; col++) {
-            uint16_t px = g_fb[fb_offset + col];
-            buf[col * 2]     = (px >> 8) & 0xFF;
-            buf[col * 2 + 1] = px & 0xFF;
+    int row = 0;
+    while (row < h) {
+        int count = (h - row < batch_rows) ? h - row : batch_rows;
+        size_t total = row_bytes * count;
+        for (int r = 0; r < count; r++) {
+            int fb_offset = (y + row + r) * TFT_WIDTH + x;
+            int out_off = r * row_bytes;
+            for (int col = 0; col < w; col++) {
+                uint16_t px = g_fb[fb_offset + col];
+                buf[out_off + col * 2]     = (px >> 8) & 0xFF;
+                buf[out_off + col * 2 + 1] = px & 0xFF;
+            }
         }
         spi_transaction_t t = {
-            .length = w * 16,
+            .length = total * 8,
             .tx_buffer = buf,
         };
         spi_device_transmit(g_spi, &t);
+        row += count;
     }
     free(buf);
 }
