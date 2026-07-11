@@ -62,11 +62,16 @@ opencrab/
 │   ├── command_sdk.h     # ELF 应用 SDK
 │   ├── *.h               # 各模块头文件
 │   └── fonts/            # 字体数据 + ELF 嵌入头
+├── flash.bin              # QEMU flash 镜像 (16MB)
 ├── data/bin/             # 编译好的 ELF 二进制
 └── tools/                # 构建工具
+    ├── qemu/              # Espressif QEMU (ESP32-S3)
+    │   └── bin/qemu-system-xtensa.exe
     ├── build_apps.py     # 编译 ELF 应用
     ├── build_all.py      # 一键构建
-    └── genfont.py        # 字库生成
+    ├── gen_flash_image.py # 生成 QEMU flash.bin + eFuse
+    ├── genfont.py        # 字库生成
+    └── run_qemu.ps1      # 一键构建 + QEMU 启动
 ```
 
 ## 引脚配置
@@ -80,6 +85,33 @@ cd tools
 pip install Pillow
 python genfont.py
 ```
+
+## QEMU 模拟器
+
+```powershell
+# 构建 + 运行 (无图形, 仅串口)
+tools/run_qemu.ps1 -NoGraphics
+
+# 仅运行 (跳过构建)
+tools/run_qemu.ps1 -NoBuild -NoGraphics
+
+# 图形模式 (SDL 显示)
+tools/run_qemu.ps1
+
+# 调试模式 (等待 GDB 连接)
+tools/run_qemu.ps1 -Gdb
+```
+
+QEMU 通过 `tools/gen_flash_image.py` 自动合并以下文件到 `flash.bin`:
+- bootloader.bin @ 0x00000
+- partitions.bin @ 0x08000
+- ota_data_initial.bin @ 0x0D000
+- firmware.bin   @ 0x10000
+- spiffs.bin     @ 0x410000 (可选)
+
+eFuse 配置: ESP32-S3 rev 0.3, 32MB RAM, Octal PSRAM, 16MB SPI Flash.
+
+注意: QEMU 内 ST7789 显示未模拟, 只能通过串口交互。
 
 ## ELF 技术要点
 

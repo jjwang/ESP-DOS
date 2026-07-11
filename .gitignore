@@ -51,3 +51,10 @@ build_archive.py
 # Python
 __pycache__/
 *.pyc
+
+# QEMU binary distribution
+tools/qemu/
+
+# Generated flash image
+flash.bin
+qemu_*.log

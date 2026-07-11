@@ -68,6 +68,7 @@ static void shell_set_input_color(shell_t *sh);
 static const cmd_entry_t cmd_table[] = {
     {"help",   "显示帮助信息",        "HELP [命令]", cmd_help},
     {"ls",     "列出目录内容",        "LS [路径]", cmd_ls},
+    {"dir",    "列出目录内容",        "DIR [路径]", cmd_ls},
     {"type",   "显示文件内容",        "TYPE <文件>", cmd_cat},
     {"cd",     "显示/切换目录",      "CD [路径]", cmd_cd},
     {"cls",    "清屏",               "CLS", cmd_clear},

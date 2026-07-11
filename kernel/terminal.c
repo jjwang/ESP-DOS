@@ -3,11 +3,10 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/uart.h"
 #include "terminal.h"
 #include "display_st7789.h"
 #include "config.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 terminal_t g_terminal;
 
@@ -114,9 +113,31 @@ static int char_display_width(uint16_t ch)
     return 12;
 }
 
+static void uart_put_utf8(uint16_t ch)
+{
+    uint8_t buf[4];
+    int len;
+    if (ch < 0x80) {
+        buf[0] = ch;
+        len = 1;
+    } else if (ch < 0x800) {
+        buf[0] = 0xC0 | (ch >> 6);
+        buf[1] = 0x80 | (ch & 0x3F);
+        len = 2;
+    } else {
+        buf[0] = 0xE0 | (ch >> 12);
+        buf[1] = 0x80 | ((ch >> 6) & 0x3F);
+        buf[2] = 0x80 | (ch & 0x3F);
+        len = 3;
+    }
+    uart_write_bytes(UART_NUM_0, buf, len);
+}
+
 void term_putchar(terminal_t *term, uint16_t ch)
 {
     if (ch == '\n') {
+        uart_put_utf8('\r');
+        uart_put_utf8('\n');
         term_newline(term);
         return;
     }
@@ -129,6 +150,8 @@ void term_putchar(terminal_t *term, uint16_t ch)
         for (int i = 0; i < 4; i++) term_putchar(term, ' ');
         return;
     }
+
+    uart_put_utf8(ch);
 
     int w = char_display_width(ch);
 

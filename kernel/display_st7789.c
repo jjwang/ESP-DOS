@@ -7,15 +7,33 @@
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "soc/soc.h"
 #include "display_st7789.h"
 #include "fonts/font_6x12.h"
 #include "fonts/font_cn_12x12.h"
 
 static const char *TAG = "ST7789";
 
+/* QEMU virtual RGB panel registers */
+#define QEMU_RGB_BASE       0x21000000
+#define QEMU_FB_BASE        0x20000000
+#define QEMU_MAGIC_ADDR     0x600263F8
+#define QEMU_MAGIC_VAL      0x51454d55  /* "QEMU" */
+
+typedef volatile struct {
+    uint32_t version;
+    uint32_t win_size;      /* height[15:0], width[31:16] */
+    uint32_t update_from;   /* y[15:0], x[31:16] */
+    uint32_t update_to;     /* y[15:0], x[31:16] */
+    void    *update_content;
+    uint32_t update_st;     /* bit0 = ena */
+    uint32_t bpp;
+} qemu_rgb_t;
+
 static spi_device_handle_t g_spi = NULL;
-static uint16_t *g_fb = NULL;       /* 帧缓冲 (PSRAM) */
+static uint16_t *g_fb = NULL;
 static int g_fb_initialized = 0;
+static int g_is_qemu = 0;
 
 /* ---- SPI 底层操作 ---- */
 static void st7789_write_cmd(uint8_t cmd)
@@ -69,24 +87,61 @@ static void st7789_set_window(int x0, int y0, int x1, int y1)
 static void fb_init(void)
 {
     if (g_fb == NULL) {
-        g_fb = (uint16_t *)heap_caps_malloc(TFT_WIDTH * TFT_HEIGHT * 2, MALLOC_CAP_SPIRAM);
-        if (g_fb == NULL) {
-            ESP_LOGE(TAG, "无法分配帧缓冲!");
-            g_fb = (uint16_t *)malloc(TFT_WIDTH * TFT_HEIGHT * 2);
+        if (g_is_qemu) {
+            g_fb = (uint16_t *)QEMU_FB_BASE;
+        } else {
+            g_fb = (uint16_t *)heap_caps_malloc(TFT_WIDTH * TFT_HEIGHT * 2, MALLOC_CAP_SPIRAM);
             if (g_fb == NULL) {
-                ESP_LOGE(TAG, "致命: 无法分配内存!");
-                abort();
+                ESP_LOGE(TAG, "PSRAM 分配失败, 回退到内部 DRAM");
+                g_fb = (uint16_t *)malloc(TFT_WIDTH * TFT_HEIGHT * 2);
             }
+        }
+        if (g_fb == NULL) {
+            ESP_LOGE(TAG, "致命: 无法分配内存!");
+            abort();
         }
         memset(g_fb, 0, TFT_WIDTH * TFT_HEIGHT * 2);
         g_fb_initialized = 1;
     }
 }
 
+/* ---- 检测是否运行在 QEMU 中 ---- */
+static void check_qemu(void)
+{
+    volatile uint32_t *magic = (volatile uint32_t *)QEMU_MAGIC_ADDR;
+    g_is_qemu = (*magic == QEMU_MAGIC_VAL);
+}
+
 /* ---- 公开API ---- */
 
 void display_init(void)
 {
+    check_qemu();
+
+    if (g_is_qemu) {
+        ESP_LOGI(TAG, "QEMU 环境, 使用虚拟 RGB 面板 %dx%d", TFT_WIDTH, TFT_HEIGHT);
+        fb_init();
+        if (!g_fb) return;
+
+        qemu_rgb_t *rgb = (qemu_rgb_t *)QEMU_RGB_BASE;
+        rgb->bpp = 16;
+        rgb->win_size = (TFT_WIDTH << 16) | TFT_HEIGHT;
+
+        display_fill(COLOR_BLACK);
+        display_fill_rect(0, 0, TFT_WIDTH, 20, 0xF800); /* RED bar for debug */
+        display_flush_all();
+
+        gpio_config_t bl_conf = {
+            .pin_bit_mask = (1ULL << TFT_BL_PIN),
+            .mode = GPIO_MODE_OUTPUT,
+        };
+        gpio_config(&bl_conf);
+        gpio_set_level(TFT_BL_PIN, 1);
+
+        ESP_LOGI(TAG, "QEMU RGB 面板初始化完成");
+        return;
+    }
+
     ESP_LOGI(TAG, "初始化 ST7789 %dx%d...", TFT_WIDTH, TFT_HEIGHT);
 
     /* 配置GPIO (不含背光, 背光最后才初始化) */
@@ -198,6 +253,17 @@ void display_flush(int x, int y, int w, int h)
     if (x + w > TFT_WIDTH)  w = TFT_WIDTH - x;
     if (y + h > TFT_HEIGHT) h = TFT_HEIGHT - y;
     if (w <= 0 || h <= 0) return;
+
+    if (g_is_qemu) {
+        qemu_rgb_t *rgb = (qemu_rgb_t *)QEMU_RGB_BASE;
+        rgb->update_from = (x << 16) | y;
+        rgb->update_to = ((x + w) << 16) | (y + h);
+        rgb->update_content = (void *)g_fb;
+        rgb->update_st = 1;
+        int qemu_flush_timeout = 100000;
+        while (rgb->update_st && --qemu_flush_timeout > 0) {}
+        return;
+    }
 
     st7789_set_window(x, y, x + w - 1, y + h - 1);
     gpio_set_level(TFT_DC_PIN, 1);

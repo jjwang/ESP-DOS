@@ -50,6 +50,7 @@ typedef struct vfs_file_s {
     uint32_t offset;
 } vfs_file_t;
 
+void vfs_register_partitions(void);
 int  vfs_init(void);
 int  vfs_format(void);
 void vfs_info(uint32_t *total, uint32_t *used);

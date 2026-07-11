@@ -6,6 +6,9 @@
 #include <errno.h>
 #include "esp_spiffs.h"
 #include "esp_log.h"
+#include "esp_flash.h"
+#include "esp_partition.h"
+#include "spi_flash_mmap.h"
 #include "vfs.h"
 #ifdef ELF_ECHO_DATA
 #include "fonts/elf_echo.h"
@@ -154,6 +157,125 @@ static void install_elf(const char *name, const uint8_t *data, uint32_t size)
     char vpath[64];
     snprintf(vpath, sizeof(vpath), "/bin/%s", name);
     reg_add(vpath, VFS_EXEC);
+}
+
+/* ---- 绕过QEMU下flash/分区访问问题 ---- */
+
+/*
+ * QEMU的ESP32-S3模拟在PSRAM remap后MMU页表损坏,
+ * 导致spi_flash_mmap(调用esp_mmu_map)返回ESP_ERR_NO_MEM (0x101),
+ * 以及rom_spiflash_api_funcs->chip_check崩溃(函数表指针无效).
+ *
+ * 解决方案:
+ *   1. --wrap=spi_flash_mmap: 用esp_flash_read替代MMU映射读取flash数据
+ *   2. --wrap=spi_flash_munmap: 无操作(数据已在缓冲区)
+ *   3. --wrap=esp_partition_find_first: 可选优化, 直接返回硬编码分区表
+ *      (即使load_partitions通过修复的spi_flash_mmap可以工作)
+ */
+
+/* ---- spi_flash_mmap 包装 ---- */
+
+#include "spi_flash_mmap.h"
+#include "esp_flash.h"
+
+/*
+ * 静态缓冲区: 模拟一个MMU页面大小的映射.
+ * ESP32-S3的CONFIG_MMU_PAGE_SIZE=0x10000(64KB).
+ * 这样即使caller在映射地址上加偏移(如load_partitions从0x0加0x8000)也能访问.
+ */
+#define MMAP_BUF_SIZE CONFIG_MMU_PAGE_SIZE
+static uint8_t s_mmap_buf[MMAP_BUF_SIZE] __attribute__((aligned(16)));
+static int s_mmap_buf_used;
+
+/* __real_spi_flash_mmap 由链接器生成 */
+esp_err_t __real_spi_flash_mmap(size_t src_addr, size_t size,
+    spi_flash_mmap_memory_t memory, const void **out_ptr,
+    spi_flash_mmap_handle_t *out_handle);
+
+esp_err_t __wrap_spi_flash_mmap(size_t src_addr, size_t size,
+    spi_flash_mmap_memory_t memory, const void **out_ptr,
+    spi_flash_mmap_handle_t *out_handle)
+{
+    if (size > MMAP_BUF_SIZE) {
+        return __real_spi_flash_mmap(src_addr, size, memory, out_ptr, out_handle);
+    }
+    if (s_mmap_buf_used) {
+        return __real_spi_flash_mmap(src_addr, size, memory, out_ptr, out_handle);
+    }
+
+    extern esp_flash_t *esp_flash_default_chip;
+    if (esp_flash_default_chip == NULL) {
+        return ESP_ERR_FLASH_NOT_INITIALISED;
+    }
+
+    s_mmap_buf_used = 1;
+    esp_err_t ret = esp_flash_read(esp_flash_default_chip, s_mmap_buf, src_addr, MMAP_BUF_SIZE);
+    if (ret != ESP_OK) {
+        s_mmap_buf_used = 0;
+        return ret;
+    }
+
+    *out_ptr = s_mmap_buf;
+    *out_handle = (spi_flash_mmap_handle_t)(1);
+    return ESP_OK;
+}
+
+void __wrap_spi_flash_munmap(spi_flash_mmap_handle_t handle)
+{
+    (void)handle;
+    s_mmap_buf_used = 0;
+}
+
+/* ---- esp_partition_find_first 包装 (可选优化) ---- */
+
+/* 预分配的静态分区对象 (避免heap分配, 仅用于return) */
+static esp_partition_t s_qemu_partitions[] = {
+    { NULL, ESP_PARTITION_TYPE_DATA, 0x02, 0x9000,   0x4000,  4096, "nvs",      false, false },
+    { NULL, ESP_PARTITION_TYPE_DATA, 0x00, 0xd000,   0x2000,  4096, "otadata",  false, false },
+    { NULL, ESP_PARTITION_TYPE_DATA, 0x01, 0xf000,   0x1000,  4096, "phy_init", false, false },
+    { NULL, ESP_PARTITION_TYPE_APP,  0x00, 0x10000,  0x400000,4096, "app",      false, false },
+    { NULL, ESP_PARTITION_TYPE_DATA, 0x82, 0x410000, 0xBF0000,4096, "littlefs", false, false },
+};
+
+/* __real_esp_partition_find_first 由链接器在--wrap时自动生成 */
+const esp_partition_t *__real_esp_partition_find_first(
+    esp_partition_type_t type, esp_partition_subtype_t subtype, const char *label);
+
+/* 包装函数: 先匹配硬编码表, 失败返回NULL (不调用系统路径以避免load_partitions) */
+const esp_partition_t *__wrap_esp_partition_find_first(
+    esp_partition_type_t type, esp_partition_subtype_t subtype, const char *label)
+{
+    for (int i = 0; i < sizeof(s_qemu_partitions)/sizeof(s_qemu_partitions[0]); i++) {
+        esp_partition_t *p = &s_qemu_partitions[i];
+        bool type_match  = (type == ESP_PARTITION_TYPE_ANY || p->type == type);
+        bool sub_match   = (subtype == ESP_PARTITION_SUBTYPE_ANY || p->subtype == subtype);
+        bool label_match = (label == NULL || strcmp(p->label, label) == 0);
+        if (type_match && sub_match && label_match) {
+            extern esp_flash_t *esp_flash_default_chip;
+            p->flash_chip = esp_flash_default_chip;
+            return p;
+        }
+    }
+    return NULL;
+}
+
+void vfs_register_partitions(void)
+{
+    /* 检查已有分区 (会经过我们的wrap) */
+    const esp_partition_t *p = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, NULL);
+    if (p != NULL && p >= s_qemu_partitions && 
+        p < s_qemu_partitions + sizeof(s_qemu_partitions)/sizeof(s_qemu_partitions[0])) {
+        ESP_LOGI(TAG, "分区表已由wrap提供");
+        return;
+    }
+    if (p != NULL) {
+        ESP_LOGI(TAG, "分区表已存在");
+        return;
+    }
+
+    ESP_LOGI(TAG, "QEMU分区wrap已就绪");
+    (void)p;
 }
 
 /* ---- 公共API ---- */

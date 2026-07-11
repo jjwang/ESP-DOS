@@ -199,13 +199,18 @@ void app_main(void)
     esp_log_set_vprintf(log_vprintf);
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    /* 初始化NVS (需要用于SPIFFS) */
+    /* 手动注册分区 (解决QEMU下load_partitions因PSRAM remap失败) */
+    vfs_register_partitions();
+
+    /* 初始化NVS */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(ret);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "NVS初始化跳过: %s", esp_err_to_name(ret));
+    }
 
     uart_init();
 
@@ -269,7 +274,10 @@ void app_main(void)
     esp_event_loop_create_default();
     esp_netif_create_default_wifi_sta();
     wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
+    ret = esp_wifi_init(&wifi_cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi初始化跳过: %s", esp_err_to_name(ret));
+    }
 
     /* 创建输入队列 */
     g_input_queue = xQueueCreate(UART_QUEUE_SIZE, sizeof(uint16_t));
