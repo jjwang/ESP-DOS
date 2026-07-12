@@ -25,7 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 chcp 65001 | Out-Null
-$PROJ = "C:\AAAProjects\OpenCrab\ESP-DOS"
+$PROJ = Resolve-Path "$PSScriptRoot\.."
 $QEMU = "$PROJ\tools\qemu\bin\qemu-system-xtensa.exe"
 $FLASH = "$PROJ\flash.bin"
 $EFUSE = "$PROJ\.pio\build\esp32-s3-dev\qemu_efuse.bin"
