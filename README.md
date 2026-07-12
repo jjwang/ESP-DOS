@@ -53,14 +53,43 @@
 
 ## 快速开始
 
+### 编译固件
+
 ```bash
-# 编译固件
 python -m platformio run
+```
 
-# 烧录固件
+### 烧录固件
+
+```bash
 python -m platformio run --target upload --upload-port COM3
+```
 
-# 串口监视器
+### QEMU 模拟器（无需硬件）
+
+使用 Espressif 定制 QEMU fork 模拟 ESP32-S3：
+
+```powershell
+# 一键构建 + 启动（SDL 图形窗口 + 串口交互）
+tools/run_qemu.ps1
+
+# 跳过构建，仅启动（已构建过时使用）
+tools/run_qemu.ps1 -NoBuild
+
+# 纯串口模式（无图形窗口）
+tools/run_qemu.ps1 -NoGraphics
+
+# 调试模式（等待 GDB 连接）
+tools/run_qemu.ps1 -Gdb
+```
+
+QEMU 通过 `tools/gen_flash_image.py` 自动合并 bootloader、分区表、固件到 `flash.bin`。首次运行需先编译固件。
+
+**注意**：QEMU 下 TCA8418 键盘不可用，通过串口（PowerShell 窗口）输入。方向键由 ANSI 转义序列支持。中文字符需控制台 UTF-8 编码（`chcp 65001`）。
+
+### 串口监视器（物理硬件）
+
+```bash
 python -m platformio device monitor --port COM3 --baud 115200
 ```
 
@@ -99,6 +128,7 @@ python -m platformio device monitor --port COM3 --baud 115200
 | `uname` | 显示系统信息 | `uname [-a]` |
 | `df` | 显示磁盘使用 | `df` |
 | `hello` | ELF 测试例程 | `hello` |
+| `edit` | 行编辑器 (ELF) | `edit <文件名>` |
 
 > 提示：ELF 应用存放于 SPIFFS 的 `/bin/` 目录。输入命令名时 Shell 先查找内置表，未命中则尝试加载 `/bin/<命令>`。
 
@@ -107,14 +137,16 @@ python -m platformio device monitor --port COM3 --baud 115200
 ```
 opencrab/
 ├── kernel/                  # 内核源码（固件主程序）
-│   ├── CMakeLists.txt       # ESP-IDF 组件注册
+│   ├── CMakeLists.txt       # ESP-IDF 组件注册 + 链接器 wrap 标志
 │   ├── main.c               # 入口，UART/显示/任务初始化
-│   ├── display_st7789.c     # ST7789 SPI 显示驱动
+│   ├── display_st7789.c     # ST7789 SPI 显示驱动 + QEMU RGB 面板
 │   ├── terminal.c           # 终端模拟器（回滚/颜色/滚动/光标）
-│   ├── vfs.c                # SPIFFS 虚拟文件系统
+│   ├── vfs.c                # SPIFFS 虚拟文件系统 + QEMU 闪存绕过
 │   ├── shell.c              # 命令行 Shell
+│   ├── editor.c             # GUI 文本编辑器（菜单栏/行号/保存提示）
 │   ├── elf_loader.c         # ELF 解析/加载/MMU 映射
-│   └── process.c            # 进程管理/系统调用表
+│   ├── process.c            # 进程管理/系统调用表
+│   └── dino.c               # 恐龙跳跃小游戏
 ├── apps/                    # ELF 应用源码
 │   ├── command.ld           # ELF 链接脚本
 │   ├── echo.c               # echo 命令
@@ -125,7 +157,7 @@ opencrab/
 │   └── df.c                 # df 命令
 ├── include/                 # 头文件
 │   ├── config.h             # 引脚/系统配置
-│   ├── app_sdk.h        # ELF 应用 SDK（系统调用表定义）
+│   ├── app_sdk.h            # ELF 应用 SDK（系统调用表定义）
 │   ├── display_st7789.h
 │   ├── terminal.h
 │   ├── vfs.h
@@ -136,13 +168,60 @@ opencrab/
 ├── data/                    # SPIFFS 初始数据
 │   └── bin/                 # 编译好的 ELF 二进制
 ├── tools/                   # 构建工具
+│   ├── qemu/                # Espressif QEMU fork (ESP32-S3)
+│   │   └── bin/qemu-system-xtensa.exe
 │   ├── build_apps.py        # 编译 ELF 应用 → data/bin/ + include/fonts/
 │   ├── build_all.py         # 一键构建（ELF + SPIFFS + 烧录）
-│   └── genfont.py           # 字库生成
+│   ├── gen_flash_image.py   # QEMU flash.bin + qemu_efuse.bin 生成器
+│   ├── genfont.py           # 字库生成
+│   └── run_qemu.ps1         # 一键构建 + QEMU 启动脚本
+├── flash.bin                # QEMU 闪存镜像（由 gen_flash_image.py 生成）
+├── AGENTS.md                # 开发备忘录（构建命令/引脚/ELF 要点）
 ├── platformio.ini           # PlatformIO 配置
-├── partitions.csv           # Flash 分区表
+├── partitions.csv           # Flash 分区表（nvs/otadata/phy_init/app/littlefs）
 ├── CMakeLists.txt           # ESP-IDF 顶层 CMake
 └── sdkconfig.defaults       # Kconfig 默认配置
+```
+
+## GUI 编辑器
+
+Editor 是基于 RGB 显示器的 GUI 编辑器，在 Shell 中按 Esc 激活菜单，方向键导航：
+
+```
+File ─── Save    保存文件（无文件名时提示输入）
+  └────── Quit    退出编辑器（未保存时提示）
+```
+
+- 左侧显示行号（灰色，4 位）
+- 底部状态栏显示文件名、修改标记、行列位置
+- 新建文件按 `Esc` → `File` → `Save` 输入文件名保存
+- 按 `Esc` 退出菜单返回编辑
+
+## QEMU 开发说明
+
+### QEMU 固件特性
+
+固件同时支持物理硬件和 QEMU 模拟器，通过 `0x600263F8` 寄存器检测 QEMU 环境：
+
+| 功能 | 物理硬件 | QEMU |
+|------|---------|------|
+| ST7789 SPI 显示 | ✅ 40MHz SPI 驱动 | ❌ 未模拟 |
+| RGB 虚拟面板 | ❌ | ✅ VRAM 0x20000000，320×170 |
+| TCA8418 键盘 | ✅ I2C | ❌ 无模拟 |
+| UART 串口 | ✅ USB-UART | ✅ `-serial mon:stdio` |
+| Wi-Fi | ✅ | ✅ 无硬件，可初始化 |
+| SPIFFS | ✅ | ✅ 首次挂载自动格式化 |
+| DS3231 RTC | ✅ I2C | ❌ 无模拟 |
+
+### QEMU MMU 问题
+
+QEMU 下 PSRAM init 后 MMU 页表耗尽，`spi_flash_mmap` 返回 `ESP_ERR_NO_MEM (0x101)`。
+解决方案是 `kernel/vfs.c` 中的链接器 wrap：
+
+```
+--wrap=spi_flash_mmap      # 用 esp_flash_read 替换 MMU 映射
+--wrap=spi_flash_munmap    # 无操作
+--wrap=esp_partition_find_first  # 可选优化，返回硬编码分区表
 ```
 
 ## 构建 ELF 应用

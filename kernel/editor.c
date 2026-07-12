@@ -12,7 +12,8 @@
 #define EDIT_MAX_LINES   1024
 #define EDIT_LINE_LEN    256
 #define EDIT_VIS_ROWS    10
-#define EDIT_VIS_COLS    53
+#define EDIT_VIS_COLS    48
+#define EDIT_LN_WIDTH    5    /* 5 chars (30px) for line number area */
 
 typedef struct {
     char **lines;
@@ -74,10 +75,15 @@ static int editor_load(editor_t *ed, const char *path)
     return 1;
 }
 
+static void editor_input_line(editor_t *ed, const char *prompt, char *out, int maxlen);
+
 static int editor_save(editor_t *ed)
 {
+    char fname[128];
     if (!ed->filename[0]) {
-        snprintf(ed->filename, sizeof(ed->filename), "untitled.txt");
+        editor_input_line(ed, "Save as: ", fname, sizeof(fname) - 1);
+        if (fname[0] == '\0') return -1;
+        strncpy(ed->filename, fname, sizeof(ed->filename) - 1);
     }
     vfs_file_t *fp = vfs_open(ed->filename, VFS_O_WRONLY | VFS_O_CREAT);
     if (!fp) return -1;
@@ -97,11 +103,22 @@ static void editor_draw_char(int x, int y, uint16_t ch, uint16_t fg, uint16_t bg
         display_draw_char_cn(x, y, ch, fg, bg);
 }
 
-static void editor_draw_line_text(int row, const char *text, uint16_t fg, uint16_t bg)
+static void editor_draw_line_text(int row, int line_num, const char *text, uint16_t fg, uint16_t bg)
 {
     int y = (row + 1) * 14;
     display_fill_rect(0, y, 320, 12, bg);
+    /* line number (dim) */
     int x = 0;
+    int n = line_num + 1;
+    if (n > 9999) n = 9999;
+    char lbuf[6];
+    lbuf[4] = ' ';
+    for (int i = 3; i >= 0; i--) { lbuf[i] = n ? '0' + (n % 10) : ' '; n /= 10; }
+    for (int i = 0; i < EDIT_LN_WIDTH; i++) {
+        editor_draw_char(x, y, (uint16_t)(unsigned char)lbuf[i], 0x39C7, bg);
+        x += 6;
+    }
+    /* text content */
     for (int i = 0; text[i] && i < EDIT_VIS_COLS; i++) {
         editor_draw_char(x, y, (uint16_t)(unsigned char)text[i], fg, bg);
         x += 6;
@@ -142,7 +159,7 @@ static void editor_render(editor_t *ed, int menu_mode, int menu_idx, int dropdow
     for (int r = 0; r < EDIT_VIS_ROWS; r++) {
         int line_idx = ed->top_line + r;
         if (line_idx < ed->line_count) {
-            editor_draw_line_text(r, ed->lines[line_idx], COLOR_GREEN, COLOR_BLACK);
+            editor_draw_line_text(r, line_idx, ed->lines[line_idx], COLOR_GREEN, COLOR_BLACK);
         } else {
             display_fill_rect(0, (r + 1) * 14, 320, 12, COLOR_BLACK);
         }
@@ -164,7 +181,7 @@ static void editor_render(editor_t *ed, int menu_mode, int menu_idx, int dropdow
 
     if (!dropdown_open && !menu_mode) {
         int cursor_y = (ed->cy + 1) * 14;
-        int cursor_x = ed->cx * 6;
+        int cursor_x = ed->cx * 6 + EDIT_LN_WIDTH * 6;
         display_fill_rect(cursor_x, cursor_y, 6, 12, COLOR_YELLOW);
         if (ed->top_line + ed->cy < ed->line_count &&
             ed->cx < (int)strlen(ed->lines[ed->top_line + ed->cy])) {
@@ -217,6 +234,39 @@ static uint16_t editor_readkey(void)
     return 0;
 }
 
+static void editor_input_line(editor_t *ed, const char *prompt, char *out, int maxlen)
+{
+    display_fill_rect(0, 11 * 14, 320, 14, COLOR_BLACK);
+    int x = 0;
+    for (int i = 0; prompt[i]; i++) {
+        editor_draw_char(x, 11 * 14 + 1, (uint16_t)(unsigned char)prompt[i], COLOR_RED, COLOR_BLACK);
+        x += 6;
+    }
+    int pos = 0;
+    out[0] = '\0';
+    while (1) {
+        int ox = x;
+        for (int i = 0; i < pos; i++)
+            editor_draw_char(ox + i * 6, 11 * 14 + 1, (uint16_t)(unsigned char)out[i], COLOR_WHITE, COLOR_BLACK);
+        if (pos < maxlen - 1)
+            display_fill_rect(ox + pos * 6, 11 * 14 + 1, 6, 12, COLOR_YELLOW);
+        display_flush_all();
+        uint16_t ch = editor_readkey();
+        if (ch == '\r' || ch == '\n') {
+            out[pos] = '\0';
+            /* drain trailing \n from CRLF */
+            if (ch == '\r') {
+                uint16_t tmp;
+                if (xQueueReceive(*g_edit_queue, &tmp, 0) == pdTRUE && tmp != '\n')
+                    xQueueSend(*g_edit_queue, &tmp, 0);
+            }
+            break;
+        }
+        if ((ch == '\b' || ch == 0x7F) && pos > 0) { pos--; }
+        else if (ch >= 0x20 && ch <= 0x7E && pos < maxlen - 1) { out[pos++] = (char)ch; }
+    }
+}
+
 static int editor_show_confirm(editor_t *ed, const char *msg)
 {
     display_fill_rect(0, 11 * 14, 320, 14, COLOR_BLACK);
@@ -260,6 +310,17 @@ static void editor_delete_char(editor_t *ed, int line, int col)
     ed->modified = 1;
 }
 
+static void editor_ensure_visible(editor_t *ed)
+{
+    if (ed->line_count <= EDIT_VIS_ROWS) {
+        ed->top_line = 0;
+        return;
+    }
+    int max_top = ed->line_count - EDIT_VIS_ROWS;
+    if (ed->top_line > max_top) ed->top_line = max_top;
+    if (ed->top_line < 0) ed->top_line = 0;
+}
+
 static void editor_newline(editor_t *ed)
 {
     int line = ed->top_line + ed->cy;
@@ -285,6 +346,7 @@ static void editor_newline(editor_t *ed)
     } else {
         ed->top_line++;
     }
+    editor_ensure_visible(ed);
 }
 
 static void editor_backspace(editor_t *ed)
@@ -308,6 +370,7 @@ static void editor_backspace(editor_t *ed)
                 ed->cx = prev_len;
                 if (ed->cy > 0) ed->cy--;
                 else ed->top_line--;
+                editor_ensure_visible(ed);
             }
         }
     }
@@ -361,6 +424,10 @@ void editor_run(const char *filename)
                 if (menu_idx == 0) {
                     if (dropdown_sel == 0) {
                         editor_save(&ed);
+                        /* drain potential trailing \n from CRLF */
+                        uint16_t tmp;
+                        if (xQueueReceive(*g_edit_queue, &tmp, 0) == pdTRUE && tmp != '\n')
+                            xQueueSend(*g_edit_queue, &tmp, 0);
                     } else if (dropdown_sel == 1) {
                         if (ed.modified) {
                             if (editor_show_confirm(&ed, "Unsaved! Save? (y/n)"))
@@ -392,7 +459,7 @@ void editor_run(const char *filename)
                     dropdown_open = 1;
                     dropdown_sel = 0;
                     editor_render(&ed, 1, menu_idx, 1, 0);
-                    uint16_t k = editor_readkey();
+                    editor_readkey();
                     dropdown_open = 0;
                     menu_mode = 0;
                     editor_render(&ed, 0, 0, 0, 0);
@@ -422,12 +489,14 @@ void editor_run(const char *filename)
         if (ch == KEY_UP) {
             if (ed.cy > 0) ed.cy--;
             else if (ed.top_line > 0) ed.top_line--;
+            editor_ensure_visible(&ed);
             len = (ed.top_line + ed.cy < ed.line_count) ?
                   strlen(ed.lines[ed.top_line + ed.cy]) : 0;
             if (ed.cx > len) ed.cx = len;
         } else if (ch == KEY_DOWN) {
             if (ed.cy < EDIT_VIS_ROWS - 1 && ed.top_line + ed.cy + 1 < ed.line_count) ed.cy++;
             else if (ed.top_line + EDIT_VIS_ROWS < ed.line_count) ed.top_line++;
+            editor_ensure_visible(&ed);
             len = (ed.top_line + ed.cy < ed.line_count) ?
                   strlen(ed.lines[ed.top_line + ed.cy]) : 0;
             if (ed.cx > len) ed.cx = len;

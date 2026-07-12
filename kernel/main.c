@@ -8,6 +8,7 @@
 #include "freertos/queue.h"
 #include "driver/uart.h"
 #include "driver/i2c.h"
+#include "tca8418.h"
 #include "esp_rom_sys.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
@@ -79,17 +80,41 @@ static void kbd_task(void *arg)
     }
 }
 
-/* 串口输入任务 */
+/* 串口输入任务: 同时处理ANSI转义序列(方向键) */
 static void input_task(void *arg)
 {
     uint8_t buf[64];
+    static uint8_t ub[4];
+    static int ul = 0, ue = 0;
+
     while (1) {
         int len = uart_read_bytes(UART_NUM_0, buf, sizeof(buf), pdMS_TO_TICKS(50));
         if (len > 0) {
             for (int i = 0; i < len; i++) {
                 uint8_t ch = buf[i];
-                static uint8_t ub[4];
-                static int ul = 0, ue = 0;
+
+                /* ANSI escape sequence: ESC [ ... */
+                if (ch == 0x1B) {
+                    /* peek next byte; if '[', consume and read terminator */
+                    if (i + 2 < len && buf[i + 1] == '[') {
+                        uint8_t cmd = buf[i + 2];
+                        i += 2; /* skip ESC [ */
+                        uint16_t key = 0;
+                        switch (cmd) {
+                            case 'A': key = KEY_UP;    break;
+                            case 'B': key = KEY_DOWN;  break;
+                            case 'C': key = KEY_RIGHT; break;
+                            case 'D': key = KEY_LEFT;  break;
+                            case 'H': key = 0xF005;    break; /* HOME */
+                            case 'F': key = 0xF006;    break; /* END  */
+                        }
+                        if (key) xQueueSend(g_input_queue, &key, 0);
+                        continue;
+                    }
+                    /* bare ESC: send immediately */
+                    xQueueSend(g_input_queue, &(uint16_t){0x1B}, 0);
+                    continue;
+                }
 
                 if (ue == 0) {
                     if (ch < 0x80) { uint16_t u = ch; xQueueSend(g_input_queue, &u, 0); }
