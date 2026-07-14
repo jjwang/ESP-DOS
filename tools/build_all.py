@@ -117,7 +117,7 @@ def flash_all():
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("OpenCrab 完整构建")
+    print("ESP-DOS 完整构建")
     print("=" * 50)
     
     if not build_elfs():

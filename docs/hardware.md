@@ -1,4 +1,4 @@
-# OpenCrab-DOS 硬件接线指南
+# ESP-DOS-DOS 硬件接线指南
 
 ## 引脚总览
 

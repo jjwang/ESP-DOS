@@ -1,4 +1,4 @@
-# AGENTS.md — OpenCrab Pocket Operating System 构建备忘录
+# AGENTS.md — ESP-DOS Pocket Operating System 构建备忘录
 
 ## 构建命令
 
@@ -37,7 +37,7 @@ python tools/build_all.py
 ## 项目结构
 
 ```
-opencrab/
+esp-dos/
 ├── platformio.ini        # PlatformIO 配置
 ├── partitions.csv        # Flash 分区表 (16MB)
 ├── sdkconfig.defaults    # ESP-IDF Kconfig 默认配置

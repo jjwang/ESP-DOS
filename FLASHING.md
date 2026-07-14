@@ -1,8 +1,8 @@
-# OpenCrab - 刷机指南
+# ESP-DOS - 刷机指南
 
 ## 项目简介
 
-OpenCrab 是一个运行在 ESP32-S3 上的类 Unix 终端系统。它提供：
+ESP-DOS 是一个运行在 ESP32-S3 上的类 Unix 终端系统。它提供：
 - 命令行终端（通过 ST7789 显示屏输出）
 - 文件系统（SPIFFS）
 - 类 Unix 命令（ls, cat, cd, pwd, mkdir, rm, echo 等）
@@ -66,8 +66,8 @@ OpenCrab 是一个运行在 ESP32-S3 上的类 Unix 终端系统。它提供：
 ## 获取源码
 
 ```bash
-git clone <项目地址> opencrab-os
-cd opencrab-os
+git clone <项目地址> esp-dos
+cd esp-dos
 ```
 
 ## 编译
@@ -80,14 +80,14 @@ pio run
 ```
 
 或使用 VSCode PlatformIO 插件：
-1. 在 VSCode 中打开 opencrab-os 目录
+1. 在 VSCode 中打开 esp-dos 目录
 2. 点击底部状态栏的 →（向右箭头）按钮
 3. 选择 "esp32-s3-dev" 环境
 
 ### ESP-IDF 命令行编译
 
 ```bash
-cd opencrab-os
+cd esp-dos
 idf.py build
 ```
 
@@ -134,7 +134,7 @@ idf.py -p COM3 flash
 1. 烧录完成后，开发板会自动重启
 2. **显示屏**上会显示启动画面：
    ```
-   OpenCrab v0.1.0
+   ESP-DOS v0.1.0
    ESP32-S3 rev.X  X核
    PSRAM: 8MB  Flash: 16MB
    显示: ST7789 320x170

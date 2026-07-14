@@ -1,4 +1,4 @@
-# OpenCrab — Pocket Operating System for ESP32
+# ESP-DOS — Pocket Operating System for ESP32
 
 一个运行在 ESP32-S3-WROOM-1 N16R8 上的口袋操作系统，类 Unix 终端 + ELF 可执行命令 + ST7789 320×170 显示屏。
 
@@ -15,7 +15,7 @@
 - **颜色区分**: 提示符 `$` 和用户输入为青色，系统输出为浅灰色
 - **光标闪烁**: 500ms 周期闪烁
 - **实时输入回显**: 串口输入逐字符显示
-- **启动画面**: OpenCrab 大 Logo（2倍缩放 + 阴影），中文系统信息
+- **启动画面**: ESP-DOS 大 Logo（2倍缩放 + 阴影），中文系统信息
 
 ## 硬件需求
 
@@ -135,7 +135,7 @@ python -m platformio device monitor --port COM3 --baud 115200
 ## 项目结构
 
 ```
-opencrab/
+esp-dos/
 ├── kernel/                  # 内核源码（固件主程序）
 │   ├── CMakeLists.txt       # ESP-IDF 组件注册 + 链接器 wrap 标志
 │   ├── main.c               # 入口，UART/显示/任务初始化

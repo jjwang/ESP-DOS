@@ -200,7 +200,7 @@ def gen_cn():
 
 if __name__ == '__main__':
     print("=" * 50)
-    print("OpenCrab 字库生成工具 v5")
+    print("ESP-DOS 字库生成工具 v5")
     print("英文: u8g2_font_6x12_tf (BDF)")
     print("中文: FreeType SimSun 12x12")
     print("=" * 50)

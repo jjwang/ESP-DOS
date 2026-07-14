@@ -507,7 +507,7 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     esp_flash_get_size(NULL, &flash_sz);
 
     shell_puts(sh, "-- CPU --\n");
-    snprintf(line, sizeof(line), "ESP32-S3 rev%d  240MHz  %d核\n", chip.revision, chip.cores);
+    snprintf(line, sizeof(line), "ESP32-S3 rev%d  240MHz  %d cores\n", chip.revision, chip.cores);
     shell_puts(sh, line);
 
     size_t total_int = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
@@ -515,12 +515,12 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
-    shell_puts(sh, "-- 内存 (片上512KB) --\n");
-    snprintf(line, sizeof(line), "�? %dK/%dK (%d%%空闲)\n",
+    shell_puts(sh, "Internal SRAM:\n");
+    snprintf(line, sizeof(line), "  free %dK / total %dK (%d%%)\n",
              (int)(free_int / 1024), (int)(total_int / 1024),
              (int)(free_int * 100 / total_int));
     shell_puts(sh, line);
-    snprintf(line, sizeof(line), "缓存+代码: %dK\n", (int)((512 - (int)total_int) / 1024));
+    snprintf(line, sizeof(line), "  cache+code: %dK\n", (int)((512 - (int)total_int) / 1024));
     shell_puts(sh, line);
 
     /* 文件系统 */
@@ -529,13 +529,13 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     uint32_t fs_free = fs_total - fs_used;
     int pct = fs_total > 0 ? (int)(fs_used * 100 / fs_total) : 0;
 
-    shell_puts(sh, "-- 存储 --\n");
+    shell_puts(sh, "-- Storage --\n");
     snprintf(line, sizeof(line), "Flash: %dMB   SPIFFS: %dKB\n",
              (int)(flash_sz / 1024 / 1024), (int)(fs_total / 1024));
     shell_puts(sh, line);
     snprintf(line, sizeof(line), "PSRAM: %dMB\n", (int)(total_psram / 1024 / 1024));
     shell_puts(sh, line);
-    snprintf(line, sizeof(line), "SPIFFS空闲: %dK/%dK (%d%%)\n",
+    snprintf(line, sizeof(line), "SPIFFS free: %dK/%dK (%d%%)\n",
              (int)(fs_free / 1024), (int)(fs_total / 1024), pct);
     shell_puts(sh, line);
 }
