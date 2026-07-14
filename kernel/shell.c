@@ -910,8 +910,7 @@ void shell_process_char(shell_t *sh, uint16_t ch)
         }
 
         sh->input_buf[sh->input_len] = '\0';
-        /* 先换行再执行（避免界面卡住不动） */
-        term_putchar(sh->term, '\n');
+        /* 先刷新再执行（避免界面卡住不动） */
         term_render(sh->term);
 
         /* 转为UTF-8字符�?*/
