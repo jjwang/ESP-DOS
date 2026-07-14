@@ -1,4 +1,4 @@
-# ESP-DOS — Pocket Operating System for ESP32
+# ESP-DOS: Pocket Operating System for ESP32
 ## ELF 应用开发指南
 
 ELF 应用是独立的 Xtensa ELF 可执行文件，存放于 SPIFFS 的 `/bin/` 目录，由 Shell 在输入未知命令时自动查找并加载执行。

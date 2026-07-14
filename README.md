@@ -1,4 +1,4 @@
-# ESP-DOS — Pocket Operating System for ESP32
+# ESP-DOS: Pocket Operating System for ESP32
 
 一个运行在 ESP32-S3-WROOM-1 N16R8 上的口袋操作系统，类 Unix 终端 + ELF 可执行命令 + ST7789 320×170 显示屏。
 

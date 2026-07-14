@@ -901,10 +901,18 @@ void shell_init(shell_t *sh, terminal_t *term)
 void shell_process_char(shell_t *sh, uint16_t ch)
 {
     if (ch == '\r' || ch == '\n') {
-        /* 跳过 CR/LF 双发导致的二次执�?(空行不产生新提示�? */
-        if (sh->input_len == 0) return;
+        /* 空行：输出换行，继续显示提示�?*/
+        if (sh->input_len == 0) {
+            term_putchar(sh->term, '\n');
+            term_render(sh->term);
+            shell_print_prompt(sh);
+            return;
+        }
 
         sh->input_buf[sh->input_len] = '\0';
+        /* 先换行再执行（避免界面卡住不动） */
+        term_putchar(sh->term, '\n');
+        term_render(sh->term);
 
         /* 转为UTF-8字符�?*/
         char utf8_cmd[MAX_CMD_LEN];
