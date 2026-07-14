@@ -376,6 +376,42 @@ static void editor_backspace(editor_t *ed)
     }
 }
 
+static void editor_show_about(editor_t *ed)
+{
+    const char *lines[] = {
+        "ESP-DOS Editor 1.0",
+        "",
+        "File > Save     save file",
+        "File > Quit     exit editor",
+        "",
+        "Esc            menu",
+        "Arrows         navigate",
+        "Enter          select",
+        "",
+        "Press Enter or Esc to close",
+    };
+    int n = sizeof(lines) / sizeof(lines[0]);
+    int bw = 280, bh = n * 14 + 28;
+    int bx = (320 - bw) / 2, by = (170 - bh) / 2;
+    display_fill_rect(bx, by, bw, bh, COLOR_DARK_GRAY);
+    display_fill_rect(bx + 2, by + 2, bw - 4, bh - 4, COLOR_LIGHT_GRAY);
+    for (int i = 0; i < n; i++) {
+        int x = bx + 10, y = by + 8 + i * 14;
+        for (int j = 0; lines[i][j]; j++)
+            editor_draw_char(x + j * 6, y, (uint16_t)(unsigned char)lines[i][j], COLOR_BLACK, COLOR_LIGHT_GRAY);
+    }
+    int okx = bx + (bw - 36) / 2, oky = by + bh - 20;
+    display_fill_rect(okx, oky, 36, 14, COLOR_BLUE);
+    const char *ok = "OK";
+    for (int j = 0; ok[j]; j++)
+        editor_draw_char(okx + 6 + j * 6, oky + 1, (uint16_t)(unsigned char)ok[j], COLOR_WHITE, COLOR_BLUE);
+    display_flush_all();
+    while (1) {
+        uint16_t ch = editor_readkey();
+        if (ch == '\r' || ch == '\n' || ch == 0x1B) break;
+    }
+}
+
 void editor_run(const char *filename)
 {
     extern QueueHandle_t g_input_queue;
@@ -456,11 +492,7 @@ void editor_run(const char *filename)
                 editor_render(&ed, 1, menu_idx, 0, 0);
             } else if (ch == KEY_DOWN || ch == '\r' || ch == '\n') {
                 if (menu_idx == 1) {
-                    dropdown_open = 1;
-                    dropdown_sel = 0;
-                    editor_render(&ed, 1, menu_idx, 1, 0);
-                    editor_readkey();
-                    dropdown_open = 0;
+                    editor_show_about(&ed);
                     menu_mode = 0;
                     editor_render(&ed, 0, 0, 0, 0);
                 } else {
