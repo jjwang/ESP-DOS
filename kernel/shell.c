@@ -810,9 +810,6 @@ void shell_execute(shell_t *sh, const char *cmd_in)
         if (vfs_stat(elf_path, &st) == 0 && (st.type == VFS_FILE || st.type == VFS_EXEC)) {
             int pid = proc_spawn_elf(elf_path, argc, argv);
             if (pid > 0) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "PID=%d\n", pid);
-                shell_puts(sh, buf);
                 int code;
                 proc_wait_any(&code);
             } else {
