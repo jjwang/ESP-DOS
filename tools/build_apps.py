@@ -9,8 +9,8 @@ OUT_DIR = os.path.join(SCRIPT_DIR, "..", "data", "bin")  # data/bin/ 用于SPIFF
 
 # Xtensa 编译工具链
 TOOLCHAIN = os.path.join(
-    os.environ.get('USERPROFILE', 'C:\\Users\\NEC'),
-    '.platformio', 'packages', 'toolchain-xtensa-esp-elf', 'bin'
+    os.environ.get('PLATFORMIO_CORE_DIR', os.path.join(os.environ.get('USERPROFILE', 'C:\\Users\\NEC'), '.platformio')),
+    'packages', 'toolchain-xtensa-esp32s3', 'bin'
 )
 CC = os.path.join(TOOLCHAIN, 'xtensa-esp32s3-elf-gcc.exe')
 OBJCOPY = os.path.join(TOOLCHAIN, 'xtensa-esp32s3-elf-objcopy.exe')

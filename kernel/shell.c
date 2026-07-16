@@ -513,7 +513,6 @@ static void cmd_sysinfo(shell_t *sh, int argc, char **argv)
     size_t total_int = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
     size_t free_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     size_t total_psram = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
-    size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
     shell_puts(sh, "Internal SRAM:\n");
     snprintf(line, sizeof(line), "  free %dK / total %dK (%d%%)\n",
