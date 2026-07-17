@@ -121,8 +121,6 @@ static void elf_printf(const char *fmt, ...)
     int n = vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
     if (n > 0) {
-        elf_set_color();
-        ets_printf("%s", buf);
         term_puts(&g_terminal, buf);
     }
 }
